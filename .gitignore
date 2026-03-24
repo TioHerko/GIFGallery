@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.DS_Store
+*.tar.xz
+*.tar.bz2
+
+# Virtual environments
+.venv
+
+# Django
+*.sqlite3
+gif/media/

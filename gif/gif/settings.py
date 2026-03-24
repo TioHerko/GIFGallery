@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-ubcb0qaiqyb)r1629@)ch5_n^f7o!k4yfba_$a%6d9!$dz4cp1
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['gif.herko.me']
+ALLOWED_HOSTS = ['gif.herko.me', '127.0.0.1']
 
 
 # Application definition
