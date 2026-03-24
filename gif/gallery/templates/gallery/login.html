@@ -1,0 +1,30 @@
+{% extends "gallery/base.html" %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<div class="flex items-center justify-center min-h-screen">
+    <div class="card bg-base-100 shadow-xl w-full max-w-sm">
+        <div class="card-body">
+            <h2 class="card-title text-2xl justify-center mb-2">GIFs</h2>
+            {% if form.errors %}
+            <div role="alert" class="alert alert-error alert-sm">
+                <span>Invalid username or password.</span>
+            </div>
+            {% endif %}
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+                <div class="form-control">
+                    <label class="label" for="id_username"><span class="label-text">Username</span></label>
+                    <input type="text" name="username" id="id_username" autofocus
+                           class="input input-bordered w-full" required>
+                </div>
+                <div class="form-control">
+                    <label class="label" for="id_password"><span class="label-text">Password</span></label>
+                    <input type="password" name="password" id="id_password"
+                           class="input input-bordered w-full" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-full">Log in</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

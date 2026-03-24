@@ -1,0 +1,146 @@
+{% extends "gallery/base.html" %}
+{% block title %}GIF Gallery{% endblock %}
+{% block content %}
+<div class="navbar bg-base-100 shadow-sm px-4 sticky top-0 z-10">
+    <div class="flex-1">
+        <a href="/" class="text-lg font-bold tracking-tight">GIFs</a>
+    </div>
+    <div class="flex-none gap-2">
+        <form method="get" action="/" class="join">
+            <input type="text" name="q" value="{{ query }}" placeholder="Search..."
+                   class="input input-sm input-bordered join-item w-40">
+            {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag.slug }}">{% endif %}
+            <button type="submit" class="btn btn-sm btn-ghost join-item">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+                </svg>
+            </button>
+        </form>
+        <a href="{% url 'gallery:upload' %}" class="btn btn-sm btn-primary">Upload</a>
+        <a href="{% url 'logout' %}" class="btn btn-sm btn-ghost">Logout</a>
+    </div>
+</div>
+
+<div class="px-4 py-3">
+    {% if query %}
+    <div class="flex items-center gap-2 mb-3">
+        <span class="text-sm opacity-70">Results for "<strong>{{ query }}</strong>"</span>
+        <a href="{% if active_tag %}?tag={{ active_tag.slug }}{% else %}/{% endif %}" class="btn btn-xs btn-ghost">Clear</a>
+    </div>
+    {% endif %}
+    <div class="flex flex-wrap gap-1.5 mb-4">
+        <a href="/" class="badge badge-lg {% if not active_tag %}badge-primary{% else %}badge-ghost{% endif %} cursor-pointer">All</a>
+        {% for tag in tags %}
+        <a href="?tag={{ tag.slug }}"
+           class="badge badge-lg {% if active_tag == tag %}badge-primary{% else %}badge-ghost{% endif %} cursor-pointer">
+            {{ tag.name }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
+        {% for gif in gifs %}
+        <div class="gif-card card bg-base-100 shadow-sm overflow-hidden hover:ring-2 hover:ring-primary transition-all"
+             data-url="{{ request.scheme }}://{{ request.get_host }}{% url 'gallery:serve_gif' gif.id %}"
+             data-tag-url="{% url 'gallery:tag_gif' gif.id %}"
+             data-tags="{% for t in gif.tags.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+            <figure class="cursor-pointer" onclick="copyUrl(this.closest('.gif-card'))">
+                <img src="{% url 'gallery:serve_gif' gif.id %}" alt="{{ gif.title }}" loading="lazy" class="w-full">
+            </figure>
+            <div class="flex items-center gap-1 px-2 py-1.5">
+                <span class="text-xs opacity-70 truncate flex-1 cursor-pointer" onclick="copyUrl(this.closest('.gif-card'))">{{ gif.title }}</span>
+                <button class="btn btn-xs btn-ghost opacity-50 hover:opacity-100" onclick="openTagEditor(this.closest('.gif-card'))" title="Edit tags">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-.707.293H7a1 1 0 01-1-1v-3a1 1 0 01.293-.707l7-7a1 1 0 011.414 0l3 3zM9 15.586V16h.414l5.293-5.293-.414-.414L9 15.586z" clip-rule="evenodd"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="tag-badges flex flex-wrap gap-1 px-2 pb-1.5 empty:hidden">
+                {% for t in gif.tags.all %}
+                <span class="badge badge-xs badge-ghost">{{ t.name }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full text-center py-16 opacity-50">
+            <p class="text-lg mb-2">No GIFs yet</p>
+            <a href="{% url 'gallery:upload' %}" class="btn btn-primary btn-sm">Upload some</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Tag editor modal -->
+<dialog id="tag-modal" class="modal">
+    <div class="modal-box max-w-sm">
+        <h3 class="text-lg font-bold mb-3">Edit tags</h3>
+        <input type="text" id="tag-input" class="input input-bordered w-full" placeholder="funny, reaction, cats">
+        <p class="text-xs opacity-50 mt-1">Comma-separated. New tags are created automatically.</p>
+        <div class="modal-action">
+            <button class="btn btn-sm btn-ghost" onclick="document.getElementById('tag-modal').close()">Cancel</button>
+            <button class="btn btn-sm btn-primary" id="tag-save-btn">Save</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button></button></form>
+</dialog>
+
+<div id="toast" class="toast toast-center toast-bottom z-50 hidden">
+    <div class="alert alert-success">
+        <span id="toast-msg">URL copied!</span>
+    </div>
+</div>
+
+<script>
+function showToast(msg) {
+    const toast = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 1500);
+}
+
+function copyUrl(card) {
+    navigator.clipboard.writeText(card.dataset.url).then(() => showToast('URL copied!'));
+}
+
+let activeCard = null;
+
+function openTagEditor(card) {
+    activeCard = card;
+    const input = document.getElementById('tag-input');
+    input.value = card.dataset.tags;
+    document.getElementById('tag-modal').showModal();
+    input.focus();
+}
+
+document.getElementById('tag-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('tag-save-btn').click(); }
+});
+
+document.getElementById('tag-save-btn').addEventListener('click', () => {
+    if (!activeCard) return;
+    const tagUrl = activeCard.dataset.tagUrl;
+    const tags = document.getElementById('tag-input').value;
+    const csrfToken = '{{ csrf_token }}';
+
+    const body = new FormData();
+    body.append('tags', tags);
+
+    fetch(tagUrl, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken},
+        body: body,
+    })
+    .then(r => r.json())
+    .then(data => {
+        // Update the card's data and badge display
+        activeCard.dataset.tags = data.tags.map(t => t.name).join(', ');
+        const badgeContainer = activeCard.querySelector('.tag-badges');
+        badgeContainer.innerHTML = data.tags.map(t =>
+            `<span class="badge badge-xs badge-ghost">${t.name}</span>`
+        ).join('');
+        document.getElementById('tag-modal').close();
+        showToast('Tags updated!');
+    });
+});
+</script>
+{% endblock %}
