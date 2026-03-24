@@ -2,6 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.db import models
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.text import slugify
 
 from .models import Gif, Tag
@@ -47,6 +48,21 @@ def serve_gif(request, gif_id):
     return response
 
 
+def embed_gif(request, gif_id):
+    gif = get_object_or_404(Gif, id=gif_id)
+    gif_url = request.build_absolute_uri(
+        reverse("gallery:serve_gif", args=[gif.id])
+    )
+    embed_url = request.build_absolute_uri(
+        reverse("gallery:embed_gif", args=[gif.id])
+    )
+    return render(
+        request,
+        "gallery/embed.html",
+        {"gif": gif, "gif_url": gif_url, "embed_url": embed_url},
+    )
+
+
 @login_required
 def tag_gif_view(request, gif_id):
     if request.method != "POST":
@@ -66,6 +82,29 @@ def tag_gif_view(request, gif_id):
     return JsonResponse({
         "tags": [{"name": t.name, "slug": t.slug} for t in gif.tags.all()]
     })
+
+
+@login_required
+def rename_gif_view(request, gif_id):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    gif = get_object_or_404(Gif, id=gif_id)
+    title = request.POST.get("title", "").strip()
+    if not title:
+        return JsonResponse({"error": "Title is required"}, status=400)
+    gif.title = title
+    gif.save(update_fields=["title"])
+    return JsonResponse({"title": gif.title})
+
+
+@login_required
+def delete_gif_view(request, gif_id):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    gif = get_object_or_404(Gif, id=gif_id)
+    gif.file.delete(save=False)
+    gif.delete()
+    return JsonResponse({"deleted": True})
 
 
 @login_required
