@@ -1,0 +1,45 @@
+# Example systemd unit for the GIF gallery app.
+#
+# Assumes:
+#   - App deployed to /srv/gif/ with a venv at /srv/gif/.venv/
+#   - A dedicated 'gif' user/group owns /srv/gif/
+#   - gunicorn installed in the venv (uv add gunicorn)
+#   - Socket path matches nginx.conf.example upstream
+#
+# To use:
+#   1. Copy to /etc/systemd/system/gif.service
+#   2. Adjust paths, user, and worker count as needed
+#   3. systemctl daemon-reload
+#   4. systemctl enable --now gif
+
+[Unit]
+Description=GIF Gallery (gunicorn)
+After=network.target
+
+[Service]
+Type=notify
+User=gif
+Group=gif
+WorkingDirectory=/srv/gif/gif
+RuntimeDirectory=gif
+
+ExecStart=/srv/gif/.venv/bin/gunicorn gif.wsgi:application \
+    --bind unix:/run/gif/gunicorn.sock \
+    --workers 2 \
+    --timeout 30 \
+    --access-logfile - \
+    --error-logfile -
+
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/srv/gif/gif/media /srv/gif/gif/db.sqlite3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,97 @@
+{% extends "gallery/base.html" %}
+{% block title %}Upload GIFs{% endblock %}
+{% block content %}
+<div class="navbar bg-base-100 shadow-sm px-4">
+    <div class="flex-1">
+        <span class="text-lg font-bold tracking-tight">Upload</span>
+    </div>
+    <div class="flex-none">
+        <a href="{% url 'gallery:gallery' %}" class="btn btn-sm btn-ghost">Back to Gallery</a>
+    </div>
+</div>
+
+<div class="max-w-xl mx-auto px-4 py-6">
+    <form method="post" enctype="multipart/form-data" id="upload-form" class="space-y-4">
+        {% csrf_token %}
+        <div class="form-control">
+            <label class="label" for="title_prefix"><span class="label-text">Title prefix (optional)</span></label>
+            <input type="text" name="title_prefix" id="title_prefix"
+                   placeholder="e.g. 'Reaction' — files become 'Reaction filename'"
+                   class="input input-bordered w-full">
+        </div>
+        <div class="form-control">
+            <label class="label" for="tags"><span class="label-text">Tags (comma-separated)</span></label>
+            <input type="text" name="tags" id="tags" placeholder="funny, reaction, cats"
+                   list="existing-tags" autocomplete="off"
+                   class="input input-bordered w-full">
+            <datalist id="existing-tags">
+                {% for tag in tags %}
+                <option value="{{ tag.name }}">
+                {% endfor %}
+            </datalist>
+        </div>
+
+        <div id="drop-zone"
+             class="border-2 border-dashed border-base-content/20 rounded-xl p-8 text-center cursor-pointer
+                    hover:border-primary/50 transition-colors">
+            <p class="opacity-50">Drag & drop GIFs here, or click to select</p>
+            <input type="file" name="files" id="file-input" multiple accept="image/gif,.gif" hidden>
+        </div>
+
+        <div id="preview" class="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2"></div>
+
+        <button type="submit" id="submit-btn" class="btn btn-primary w-full" disabled>Upload</button>
+    </form>
+</div>
+
+<script>
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const preview = document.getElementById('preview');
+const submitBtn = document.getElementById('submit-btn');
+
+dropZone.addEventListener('click', () => fileInput.click());
+
+dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('border-primary', 'bg-primary/5');
+});
+
+dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('border-primary', 'bg-primary/5');
+});
+
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('border-primary', 'bg-primary/5');
+    addFiles(e.dataTransfer.files);
+});
+
+fileInput.addEventListener('change', () => {
+    addFiles(fileInput.files);
+});
+
+const selectedFiles = new DataTransfer();
+
+function addFiles(files) {
+    for (const file of files) {
+        if (file.type === 'image/gif' || file.name.endsWith('.gif')) {
+            selectedFiles.items.add(file);
+            const div = document.createElement('div');
+            div.className = 'card bg-base-100 overflow-hidden';
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            img.className = 'w-full';
+            const name = document.createElement('div');
+            name.className = 'px-1 py-1 text-xs text-center opacity-60 truncate';
+            name.textContent = file.name;
+            div.appendChild(img);
+            div.appendChild(name);
+            preview.appendChild(div);
+        }
+    }
+    fileInput.files = selectedFiles.files;
+    submitBtn.disabled = selectedFiles.files.length === 0;
+}
+</script>
+{% endblock %}

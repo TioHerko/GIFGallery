@@ -1,0 +1,93 @@
+# Example nginx config for the GIF gallery app.
+#
+# Assumes:
+#   - Gunicorn running on unix socket at /run/gif/gunicorn.sock
+#   - Django project root at /srv/gif/gif/
+#   - Static files collected to /srv/gif/gif/staticfiles/
+#     (run: python manage.py collectstatic)
+#   - Media uploads in /srv/gif/gif/media/
+#   - TLS terminated by nginx (certs via Let's Encrypt or similar)
+#
+# To use:
+#   1. Copy to /etc/nginx/sites-available/gif
+#   2. Replace gifs.example.com with your domain
+#   3. Update paths to match your deployment
+#   4. ln -s /etc/nginx/sites-available/gif /etc/nginx/sites-enabled/
+#   5. nginx -t && systemctl reload nginx
+
+upstream gif_app {
+    server unix:/run/gif/gunicorn.sock fail_timeout=0;
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name gifs.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name gifs.example.com;
+
+    # --- TLS ---
+    ssl_certificate     /etc/letsencrypt/live/gifs.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/gifs.example.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    # --- Limits ---
+    client_max_body_size 50m;
+
+    # --- Static files ---
+    # Served directly by nginx, bypasses Django entirely.
+    location /static/ {
+        alias /srv/gif/gif/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # --- Media / uploaded GIFs ---
+    # Nginx serves the files directly from disk for /media/ paths.
+    # However, the app serves GIFs through /gif/<id>/ with cache headers,
+    # so this block is mainly a fallback.
+    location /media/ {
+        alias /srv/gif/gif/media/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # --- GIF serving (via Django, with nginx caching) ---
+    # The app sets Cache-Control headers; nginx respects them.
+    # For higher throughput, enable proxy caching below.
+    location /gif/ {
+        proxy_pass http://gif_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Optional: enable nginx proxy cache for GIF responses
+        # proxy_cache gif_cache;
+        # proxy_cache_valid 200 1y;
+        # proxy_cache_use_stale error timeout updating;
+    }
+
+    # --- Everything else -> Django ---
+    location / {
+        proxy_pass http://gif_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+    }
+}
+
+# Optional: proxy cache zone for GIF responses (put in http {} block)
+# proxy_cache_path /var/cache/nginx/gif levels=1:2 keys_zone=gif_cache:10m
+#                  max_size=1g inactive=1y use_temp_path=off;
