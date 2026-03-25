@@ -1,7 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.db import models
 from django.http import FileResponse, Http404, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import aget_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
 
@@ -9,14 +9,14 @@ from .models import Gif, Tag
 
 
 @login_required
-def gallery_view(request):
+async def gallery_view(request):
     tag_slug = request.GET.get("tag")
     query = request.GET.get("q", "").strip()
     gifs = Gif.objects.prefetch_related("tags").all()
     active_tag = None
 
     if tag_slug:
-        active_tag = get_object_or_404(Tag, slug=tag_slug)
+        active_tag = await aget_object_or_404(Tag, slug=tag_slug)
         gifs = gifs.filter(tags=active_tag)
 
     if query:
@@ -24,7 +24,8 @@ def gallery_view(request):
             models.Q(title__icontains=query) | models.Q(tags__name__icontains=query)
         ).distinct()
 
-    tags = Tag.objects.all()
+    gifs = [gif async for gif in gifs]
+    tags = [tag async for tag in Tag.objects.all()]
     return render(
         request,
         "gallery/gallery.html",
@@ -37,8 +38,8 @@ def gallery_view(request):
     )
 
 
-def serve_gif(request, gif_id):
-    gif = get_object_or_404(Gif, id=gif_id)
+async def serve_gif(request, gif_id):
+    gif = await aget_object_or_404(Gif, id=gif_id)
     try:
         response = FileResponse(gif.file.open("rb"), content_type="image/gif")
     except FileNotFoundError:
@@ -48,8 +49,8 @@ def serve_gif(request, gif_id):
     return response
 
 
-def embed_gif(request, gif_id):
-    gif = get_object_or_404(Gif, id=gif_id)
+async def embed_gif(request, gif_id):
+    gif = await aget_object_or_404(Gif, id=gif_id)
     gif_url = request.build_absolute_uri(
         reverse("gallery:serve_gif", args=[gif.id])
     )
@@ -64,51 +65,51 @@ def embed_gif(request, gif_id):
 
 
 @login_required
-def tag_gif_view(request, gif_id):
+async def tag_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
-    gif = get_object_or_404(Gif, id=gif_id)
+    gif = await aget_object_or_404(Gif, id=gif_id)
     tag_names = request.POST.get("tags", "")
     tags = []
     for name in tag_names.split(","):
         name = name.strip()
         if name:
-            tag, _ = Tag.objects.get_or_create(
+            tag, _ = await Tag.objects.aget_or_create(
                 slug=slugify(name),
                 defaults={"name": name},
             )
             tags.append(tag)
-    gif.tags.set(tags)
+    await gif.tags.aset(tags)
     return JsonResponse({
-        "tags": [{"name": t.name, "slug": t.slug} for t in gif.tags.all()]
+        "tags": [{"name": t.name, "slug": t.slug} async for t in gif.tags.all()]
     })
 
 
 @login_required
-def rename_gif_view(request, gif_id):
+async def rename_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
-    gif = get_object_or_404(Gif, id=gif_id)
+    gif = await aget_object_or_404(Gif, id=gif_id)
     title = request.POST.get("title", "").strip()
     if not title:
         return JsonResponse({"error": "Title is required"}, status=400)
     gif.title = title
-    gif.save(update_fields=["title"])
+    await gif.asave(update_fields=["title"])
     return JsonResponse({"title": gif.title})
 
 
 @login_required
-def delete_gif_view(request, gif_id):
+async def delete_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
-    gif = get_object_or_404(Gif, id=gif_id)
+    gif = await aget_object_or_404(Gif, id=gif_id)
     gif.file.delete(save=False)
-    gif.delete()
+    await gif.adelete()
     return JsonResponse({"deleted": True})
 
 
 @login_required
-def upload_view(request):
+async def upload_view(request):
     if request.method == "POST":
         files = request.FILES.getlist("files")
         tag_names = request.POST.get("tags", "")
@@ -119,7 +120,7 @@ def upload_view(request):
         for name in tag_names.split(","):
             name = name.strip()
             if name:
-                tag, _ = Tag.objects.get_or_create(
+                tag, _ = await Tag.objects.aget_or_create(
                     slug=slugify(name),
                     defaults={"name": name},
                 )
@@ -131,13 +132,13 @@ def upload_view(request):
             # Strip file extension from title
             if "." in title:
                 title = title.rsplit(".", 1)[0]
-            gif = Gif.objects.create(title=title, file=f)
-            gif.tags.set(tags)
+            gif = await Gif.objects.acreate(title=title, file=f)
+            await gif.tags.aset(tags)
             created.append(str(gif.id))
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return JsonResponse({"created": created})
         return redirect("gallery:gallery")
 
-    tags = Tag.objects.all()
+    tags = [tag async for tag in Tag.objects.all()]
     return render(request, "gallery/upload.html", {"tags": tags})
