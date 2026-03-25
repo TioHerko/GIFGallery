@@ -3,7 +3,7 @@
 # Assumes:
 #   - App deployed to /srv/gif/ with a venv at /srv/gif/.venv/
 #   - A dedicated 'gif' user/group owns /srv/gif/
-#   - gunicorn installed in the venv (uv add gunicorn)
+#   - uvicorn installed in the venv (uv add uvicorn[standard])
 #   - Socket path matches nginx.conf.example upstream
 #
 # To use:
@@ -13,24 +13,23 @@
 #   4. systemctl enable --now gif
 
 [Unit]
-Description=GIF Gallery (gunicorn)
+Description=GIF Gallery (uvicorn)
 After=network.target
 
 [Service]
-Type=notify
+Type=simple
 User=gif
 Group=gif
 WorkingDirectory=/srv/gif/gif
 RuntimeDirectory=gif
 
-ExecStart=/srv/gif/.venv/bin/gunicorn gif.wsgi:application \
-    --bind unix:/run/gif/gunicorn.sock \
+ExecStart=/srv/gif/.venv/bin/uvicorn gif.asgi:application \
+    --uds /run/gif/uvicorn.sock \
     --workers 2 \
-    --timeout 30 \
-    --access-logfile - \
-    --error-logfile -
+    --access-log \
+    --loop uvloop \
+    --http httptools
 
-ExecReload=/bin/kill -s HUP $MAINPID
 KillMode=mixed
 Restart=on-failure
 RestartSec=5
