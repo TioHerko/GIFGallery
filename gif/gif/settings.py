@@ -27,6 +27,8 @@ DEBUG = False
 
 ALLOWED_HOSTS = ['gif.herko.me', '127.0.0.1']
 
+CSRF_TRUSTED_ORIGINS = ['https://gif.herko.me']
+
 
 # Application definition
 
