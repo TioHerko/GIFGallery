@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.db import models
-from django.http import FileResponse, Http404, JsonResponse
+import aiofiles
+from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.shortcuts import aget_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
@@ -40,10 +41,16 @@ async def gallery_view(request):
 
 async def serve_gif(request, gif_id):
     gif = await aget_object_or_404(Gif, id=gif_id)
-    try:
-        response = FileResponse(gif.file.open("rb"), content_type="image/gif")
-    except FileNotFoundError:
-        raise Http404("GIF file not found")
+
+    async def stream_file():
+        try:
+            async with aiofiles.open(gif.file.path, "rb") as f:
+                while chunk := await f.read(8192):
+                    yield chunk
+        except FileNotFoundError:
+            raise Http404("GIF file not found")
+
+    response = StreamingHttpResponse(stream_file(), content_type="image/gif")
     response["Cache-Control"] = "public, max-age=31536000, immutable"
     response["Content-Disposition"] = f'inline; filename="{gif.title}.gif"'
     return response
