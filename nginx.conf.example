@@ -1,7 +1,7 @@
 # Example nginx config for the GIF gallery app.
 #
 # Assumes:
-#   - Gunicorn running on unix socket at /run/gif/gunicorn.sock
+#   - Uvicorn running on unix socket at /run/gif/uvicorn.sock
 #   - Django project root at /srv/gif/gif/
 #   - Static files collected to /srv/gif/gif/staticfiles/
 #     (run: python manage.py collectstatic)
@@ -16,7 +16,7 @@
 #   5. nginx -t && systemctl reload nginx
 
 upstream gif_app {
-    server unix:/run/gif/gunicorn.sock fail_timeout=0;
+    server unix:/run/gif/uvicorn.sock fail_timeout=0;
 }
 
 # Redirect HTTP to HTTPS

@@ -6,10 +6,10 @@ Single-user Django app for hosting, tagging, and sharing GIFs.
 
 ```
 gif/                    # repo root
-  pyproject.toml        # uv-managed, deps: django, nanoid
+  pyproject.toml        # uv-managed, deps: django, nanoid, uvicorn
   nginx.conf.example    # production nginx template
   gif/                  # Django root (contains manage.py)
-    gif/                # Django project config (settings, urls, wsgi)
+    gif/                # Django project config (settings, urls, wsgi, asgi)
     gallery/            # main app (models, views, templates, static)
     media/              # uploaded GIF files (gitignored)
     staticfiles/        # collectstatic output (gitignored)
@@ -20,7 +20,7 @@ gif/                    # repo root
 All commands run from `gif/gif/` (the directory with `manage.py`):
 
 ```bash
-uv run python manage.py runserver        # dev server
+uv run uvicorn gif.asgi:application --reload  # dev server (ASGI)
 uv run python manage.py test             # run tests
 uv run python manage.py makemigrations   # after model changes
 uv run python manage.py migrate          # apply migrations
