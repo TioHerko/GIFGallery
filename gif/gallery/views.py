@@ -7,6 +7,7 @@ from django.shortcuts import aget_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
 
+from .auth import auth_required
 from .models import Gif, Tag
 
 
@@ -72,7 +73,7 @@ async def embed_gif(request, gif_id):
     )
 
 
-@login_required
+@auth_required
 async def tag_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
@@ -93,7 +94,7 @@ async def tag_gif_view(request, gif_id):
     })
 
 
-@login_required
+@auth_required
 async def rename_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
@@ -106,7 +107,7 @@ async def rename_gif_view(request, gif_id):
     return JsonResponse({"title": gif.title})
 
 
-@login_required
+@auth_required
 async def delete_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
@@ -116,7 +117,7 @@ async def delete_gif_view(request, gif_id):
     return JsonResponse({"deleted": True})
 
 
-@login_required
+@auth_required
 async def copy_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
@@ -127,7 +128,7 @@ async def copy_gif_view(request, gif_id):
     return JsonResponse({"copy_count": gif.copy_count})
 
 
-@login_required
+@auth_required
 async def upload_view(request):
     if request.method == "POST":
         files = request.FILES.getlist("files")
@@ -161,3 +162,36 @@ async def upload_view(request):
 
     tags = [tag async for tag in Tag.objects.all()]
     return render(request, "gallery/upload.html", {"tags": tags})
+
+
+@auth_required
+async def api_list_gifs(request):
+    tag_slug = request.GET.get("tag")
+    query = request.GET.get("q", "").strip()
+    gifs = Gif.objects.prefetch_related("tags").all()
+
+    if tag_slug:
+        gifs = gifs.filter(tags__slug=tag_slug)
+
+    if query:
+        gifs = gifs.filter(
+            models.Q(title__icontains=query) | models.Q(tags__name__icontains=query)
+        ).distinct()
+
+    results = []
+    async for gif in gifs:
+        results.append({
+            "id": gif.id,
+            "title": gif.title,
+            "url": request.build_absolute_uri(
+                reverse("gallery:serve_gif", args=[gif.id])
+            ),
+            "embed_url": request.build_absolute_uri(
+                reverse("gallery:embed_gif", args=[gif.id])
+            ),
+            "tags": [{"name": t.name, "slug": t.slug} async for t in gif.tags.all()],
+            "copy_count": gif.copy_count,
+            "created_at": gif.created_at.isoformat(),
+        })
+
+    return JsonResponse({"gifs": results})

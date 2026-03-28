@@ -1,5 +1,9 @@
+import hashlib
+import secrets
+
 from nanoid import generate
 
+from django.conf import settings
 from django.db import models
 
 NANOID_LENGTH = 12
@@ -35,3 +39,27 @@ class Gif(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class APIToken(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="api_tokens"
+    )
+    name = models.CharField(max_length=100)
+    token_hash = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.user})"
+
+    @classmethod
+    def hash_token(cls, raw_token):
+        return hashlib.sha256(raw_token.encode()).hexdigest()
+
+    @classmethod
+    def create_token(cls, user, name="default"):
+        raw_token = secrets.token_urlsafe(32)
+        token = cls.objects.create(
+            user=user, name=name, token_hash=cls.hash_token(raw_token)
+        )
+        return token, raw_token
