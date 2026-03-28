@@ -1,5 +1,6 @@
 from django.contrib.auth.decorators import login_required
 from django.db import models
+from django.db.models import F
 import aiofiles
 from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.shortcuts import aget_object_or_404, redirect, render
@@ -113,6 +114,17 @@ async def delete_gif_view(request, gif_id):
     gif.file.delete(save=False)
     await gif.adelete()
     return JsonResponse({"deleted": True})
+
+
+@login_required
+async def copy_gif_view(request, gif_id):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    gif = await aget_object_or_404(Gif, id=gif_id)
+    gif.copy_count = F("copy_count") + 1
+    await gif.asave(update_fields=["copy_count"])
+    await gif.arefresh_from_db(fields=["copy_count"])
+    return JsonResponse({"copy_count": gif.copy_count})
 
 
 @login_required

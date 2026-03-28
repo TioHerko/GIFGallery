@@ -51,6 +51,7 @@
              data-url="{{ request.scheme }}://{{ request.get_host }}{% url 'gallery:embed_gif' gif.id %}"
              data-raw-url="{{ request.scheme }}://{{ request.get_host }}{% url 'gallery:serve_gif' gif.id %}"
              data-tag-url="{% url 'gallery:tag_gif' gif.id %}"
+             data-copy-url="{% url 'gallery:copy_gif' gif.id %}"
              data-delete-url="{% url 'gallery:delete_gif' gif.id %}"
              data-rename-url="{% url 'gallery:rename_gif' gif.id %}"
              data-title="{{ gif.title }}"
@@ -177,12 +178,26 @@ function showToast(msg, reload = false) {
     }
 }
 
+function trackCopy(card) {
+    const csrfToken = '{{ csrf_token }}';
+    fetch(card.dataset.copyUrl, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken},
+    });
+}
+
 function copyUrl(card) {
-    navigator.clipboard.writeText(card.dataset.url).then(() => showToast('URL copied!'));
+    navigator.clipboard.writeText(card.dataset.url).then(() => {
+        trackCopy(card);
+        showToast('URL copied!');
+    });
 }
 
 function copyRawUrl(card) {
-    navigator.clipboard.writeText(card.dataset.rawUrl).then(() => showToast('Direct link copied!'));
+    navigator.clipboard.writeText(card.dataset.rawUrl).then(() => {
+        trackCopy(card);
+        showToast('Direct link copied!');
+    });
 }
 
 let renameCard = null;

@@ -10,6 +10,7 @@ urlpatterns = [
     path("gif/<str:gif_id>.gif", views.serve_gif, name="serve_gif"),
     path("gif/<str:gif_id>/tags/", views.tag_gif_view, name="tag_gif"),
     path("gif/<str:gif_id>/rename/", views.rename_gif_view, name="rename_gif"),
+    path("gif/<str:gif_id>/copy/", views.copy_gif_view, name="copy_gif"),
     path("gif/<str:gif_id>/delete/", views.delete_gif_view, name="delete_gif"),
     path("upload/", views.upload_view, name="upload"),
 ]
