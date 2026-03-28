@@ -32,6 +32,11 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(status.starts(with: "OK") ? .green : .red)
                     }
+
+                    Spacer()
+
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
                 }
             }
         }
