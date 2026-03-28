@@ -13,4 +13,5 @@ urlpatterns = [
     path("gif/<str:gif_id>/copy/", views.copy_gif_view, name="copy_gif"),
     path("gif/<str:gif_id>/delete/", views.delete_gif_view, name="delete_gif"),
     path("upload/", views.upload_view, name="upload"),
+    path("api/gifs/", views.api_list_gifs, name="api_list_gifs"),
 ]
