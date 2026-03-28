@@ -33,26 +33,35 @@ struct GIFGridItem: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(gif.title)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+            HStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(gif.title)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
-                if !gif.tags.isEmpty {
-                    HStack(spacing: 4) {
-                        ForEach(gif.tags) { tag in
-                            Text(tag.name)
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.quaternary, in: Capsule())
+                    if !gif.tags.isEmpty {
+                        HStack(spacing: 4) {
+                            ForEach(gif.tags) { tag in
+                                Text(tag.name)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.quaternary, in: Capsule())
+                            }
                         }
+                        .lineLimit(1)
                     }
-                    .lineLimit(1)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button { onCopyRaw() } label: {
+                    Image(systemName: "link")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help("Copy direct GIF link")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
         }
