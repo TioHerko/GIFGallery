@@ -16,6 +16,14 @@
                 </svg>
             </button>
         </form>
+        <button id="pause-btn" class="btn btn-sm btn-ghost rounded-btn" onclick="togglePauseAll()" title="Pause/Resume GIFs">
+            <svg id="pause-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            <svg id="play-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 hidden" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.118v3.764a1 1 0 001.555.832l3.197-1.882a1 1 0 000-1.664l-3.197-1.882z" clip-rule="evenodd"/>
+            </svg>
+        </button>
         <a href="{% url 'gallery:upload' %}" class="btn btn-sm btn-primary rounded-btn">Upload</a>
         <a href="{% url 'logout' %}" class="btn btn-sm btn-ghost rounded-btn">Logout</a>
     </div>
@@ -296,5 +304,65 @@ document.getElementById('tag-save-btn').addEventListener('click', () => {
         showToast('Tags updated!', true);
     });
 });
+
+// --- GIF pause/resume ---
+let gifsPaused = false;
+let autoPauseTimer = null;
+const AUTO_PAUSE_MS = 15000;
+
+function pauseAllGifs() {
+    if (gifsPaused) return;
+    gifsPaused = true;
+    document.getElementById('pause-icon').classList.add('hidden');
+    document.getElementById('play-icon').classList.remove('hidden');
+    document.getElementById('pause-btn').title = 'Resume GIFs';
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    document.querySelectorAll('.gif-card figure img').forEach(img => {
+        if (img.dataset.originalSrc) return;
+        img.dataset.originalSrc = img.src;
+        if (!img.naturalWidth) return;
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        ctx.drawImage(img, 0, 0);
+        try { img.src = canvas.toDataURL(); } catch(e) {}
+    });
+}
+
+function resumeAllGifs() {
+    if (!gifsPaused) return;
+    gifsPaused = false;
+    document.getElementById('play-icon').classList.add('hidden');
+    document.getElementById('pause-icon').classList.remove('hidden');
+    document.getElementById('pause-btn').title = 'Pause GIFs';
+    document.querySelectorAll('.gif-card figure img').forEach(img => {
+        if (img.dataset.originalSrc) {
+            const newImg = document.createElement('img');
+            newImg.alt = img.alt;
+            newImg.loading = 'lazy';
+            newImg.className = img.className;
+            newImg.src = img.dataset.originalSrc;
+            img.replaceWith(newImg);
+        }
+    });
+    resetAutoPause();
+}
+
+function togglePauseAll() {
+    if (gifsPaused) resumeAllGifs(); else pauseAllGifs();
+}
+
+function resetAutoPause() {
+    clearTimeout(autoPauseTimer);
+    autoPauseTimer = setTimeout(pauseAllGifs, AUTO_PAUSE_MS);
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) resumeAllGifs();
+});
+window.addEventListener('focus', resumeAllGifs);
+window.addEventListener('pageshow', resumeAllGifs);
+
+resetAutoPause();
 </script>
 {% endblock %}
