@@ -9,4 +9,5 @@ dependencies = [
     "uvicorn[standard]>=0.34.0",
     "nanoid>=2.0.0",
     "aiofiles>=25.1.0",
+    "pillow>=12.2.0",
 ]
