@@ -31,6 +31,7 @@ struct GalleryView: View {
                                 GIFGridItem(
                                     gif: gif,
                                     gifData: viewModel.gifDataCache[gif.id],
+                                    paused: viewModel.gifsPaused,
                                     onCopyEmbed: {
                                         viewModel.copyEmbedURL(gif)
                                         flash("Embed URL copied")
@@ -130,6 +131,12 @@ struct GalleryView: View {
         .onAppear {
             if !viewModel.isConfigured { showSettings = true }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            viewModel.scheduleAutoPause()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            viewModel.cancelAutoPauseAndResume()
+        }
     }
 
     private var tagBar: some View {
@@ -162,8 +169,8 @@ struct GalleryView: View {
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) {
-        var urls: [URL] = []
         let group = DispatchGroup()
+        var urls: [URL] = []
         for provider in providers {
             group.enter()
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in

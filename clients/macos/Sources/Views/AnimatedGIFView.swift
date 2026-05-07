@@ -3,11 +3,12 @@ import SwiftUI
 
 struct AnimatedGIFView: NSViewRepresentable {
     let data: Data
+    var paused: Bool = false
 
     func makeNSView(context: Context) -> NSImageView {
         let view = NSImageView()
         view.imageScaling = .scaleProportionallyUpOrDown
-        view.animates = true
+        view.animates = !paused
         view.canDrawSubviewsIntoLayer = true
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         view.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
@@ -15,8 +16,9 @@ struct AnimatedGIFView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSImageView, context: Context) {
-        let image = NSImage(data: data)
-        nsView.image = image
-        nsView.animates = true
+        if nsView.image == nil {
+            nsView.image = NSImage(data: data)
+        }
+        nsView.animates = !paused
     }
 }

@@ -8,6 +8,7 @@ urlpatterns = [
     path("", views.gallery_view, name="gallery"),
     path("gif/<str:gif_id>/", views.embed_gif, name="embed_gif"),
     path("gif/<str:gif_id>.gif", views.serve_gif, name="serve_gif"),
+    path("thumb/<str:gif_id>.gif", views.serve_thumbnail, name="serve_thumbnail"),
     path("gif/<str:gif_id>/tags/", views.tag_gif_view, name="tag_gif"),
     path("gif/<str:gif_id>/rename/", views.rename_gif_view, name="rename_gif"),
     path("gif/<str:gif_id>/copy/", views.copy_gif_view, name="copy_gif"),

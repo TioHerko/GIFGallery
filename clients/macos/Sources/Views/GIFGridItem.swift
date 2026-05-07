@@ -3,6 +3,7 @@ import SwiftUI
 struct GIFGridItem: View {
     let gif: GIFItem
     let gifData: Data?
+    let paused: Bool
     let onCopyEmbed: () -> Void
     let onCopyRaw: () -> Void
     let onEditTags: () -> Void
@@ -13,7 +14,7 @@ struct GIFGridItem: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topTrailing) {
                 if let data = gifData {
-                    AnimatedGIFView(data: data)
+                    AnimatedGIFView(data: data, paused: paused)
                         .frame(minHeight: 100, maxHeight: 300)
                         .clipped()
                 } else {

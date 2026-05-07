@@ -4,10 +4,13 @@ struct GIFItem: Codable, Identifiable {
     let id: String
     var title: String
     let url: String
+    let thumbnailUrl: String?
     let embedUrl: String
     var tags: [Tag]
     var copyCount: Int
     let createdAt: String
+
+    var displayUrl: String { thumbnailUrl ?? url }
 }
 
 struct GIFListResponse: Codable {

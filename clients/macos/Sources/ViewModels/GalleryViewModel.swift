@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class GalleryViewModel {
     var gifs: [GIFItem] = []
@@ -11,6 +12,7 @@ final class GalleryViewModel {
     var availableTags: [Tag] = []
     var isLoading = false
     var errorMessage: String?
+    var gifsPaused = false
 
     // Sheets
     var editingTagsGIF: GIFItem?
@@ -19,6 +21,9 @@ final class GalleryViewModel {
     var deletingGIF: GIFItem?
 
     private var searchTask: Task<Void, Never>?
+    private var autoPauseTask: Task<Void, Never>?
+
+    static let autoPauseDelay: Duration = .seconds(15)
 
     private var client: APIClient? {
         guard let urlString = UserDefaults.standard.string(forKey: "serverURL"),
@@ -35,13 +40,13 @@ final class GalleryViewModel {
     }
 
     func fetchGIFs() async {
-        guard let client else { return }
+        guard isConfigured else { return }
         isLoading = true
         errorMessage = nil
         do {
             let tag = selectedTag?.isEmpty == true ? nil : selectedTag
             let query = searchQuery.isEmpty ? nil : searchQuery
-            gifs = try await client.listGIFs(tag: tag, query: query)
+            gifs = try await client!.listGIFs(tag: tag, query: query)
             rebuildTags()
         } catch {
             errorMessage = error.localizedDescription
@@ -49,9 +54,29 @@ final class GalleryViewModel {
         isLoading = false
     }
 
+    func fetchGIFsIfConfigured() async {
+        guard isConfigured else { return }
+        await fetchGIFs()
+    }
+
+    func scheduleAutoPause() {
+        autoPauseTask?.cancel()
+        autoPauseTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.autoPauseDelay)
+            guard !Task.isCancelled else { return }
+            self?.gifsPaused = true
+        }
+    }
+
+    func cancelAutoPauseAndResume() {
+        autoPauseTask?.cancel()
+        autoPauseTask = nil
+        gifsPaused = false
+    }
+
     func debouncedSearch() {
         searchTask?.cancel()
-        searchTask = Task {
+        searchTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
             await fetchGIFs()
@@ -60,7 +85,7 @@ final class GalleryViewModel {
 
     func loadGIFData(for gif: GIFItem) async {
         guard gifDataCache[gif.id] == nil, let client else { return }
-        guard let url = URL(string: gif.url) else { return }
+        guard let url = URL(string: gif.displayUrl) else { return }
         do {
             let data = try await client.fetchGIFData(from: url)
             gifDataCache[gif.id] = data
