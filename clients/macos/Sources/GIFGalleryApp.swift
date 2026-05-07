@@ -2,11 +2,11 @@ import SwiftUI
 
 @main
 struct GIFGalleryApp: App {
-    @State private var viewModel = GalleryViewModel()
+    static let viewModel = GalleryViewModel()
 
     var body: some Scene {
         WindowGroup {
-            GalleryView(viewModel: viewModel)
+            GalleryView(viewModel: Self.viewModel)
                 .frame(minWidth: 600, minHeight: 400)
         }
 

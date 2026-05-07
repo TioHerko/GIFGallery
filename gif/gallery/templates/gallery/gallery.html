@@ -65,7 +65,7 @@
              data-title="{{ gif.title }}"
              data-tags="{% for t in gif.tags.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
             <figure class="cursor-pointer" onclick="copyUrl(this.closest('.gif-card'))">
-                <img src="{% url 'gallery:serve_gif' gif.id %}" alt="{{ gif.title }}" loading="lazy" class="w-full">
+                <img src="{% url 'gallery:serve_thumbnail' gif.id %}" alt="{{ gif.title }}" loading="lazy" class="w-full">
             </figure>
             <div class="flex items-center gap-1 px-2 py-1.5">
                 <span class="text-xs opacity-70 truncate flex-1 cursor-pointer" onclick="openRenameEditor(this.closest('.gif-card'))" title="Click to rename">{{ gif.title }}</span>
@@ -345,24 +345,43 @@ function resumeAllGifs() {
             img.replaceWith(newImg);
         }
     });
-    resetAutoPause();
 }
 
 function togglePauseAll() {
     if (gifsPaused) resumeAllGifs(); else pauseAllGifs();
 }
 
-function resetAutoPause() {
+function isUnfocused() {
+    return document.hidden || !document.hasFocus();
+}
+
+function scheduleAutoPause() {
     clearTimeout(autoPauseTimer);
     autoPauseTimer = setTimeout(pauseAllGifs, AUTO_PAUSE_MS);
 }
 
-document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) resumeAllGifs();
-});
-window.addEventListener('focus', resumeAllGifs);
-window.addEventListener('pageshow', resumeAllGifs);
+function cancelAutoPause() {
+    clearTimeout(autoPauseTimer);
+    autoPauseTimer = null;
+}
 
-resetAutoPause();
+function onFocusGained() {
+    cancelAutoPause();
+    resumeAllGifs();
+}
+
+function onFocusLost() {
+    if (gifsPaused) return;
+    scheduleAutoPause();
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) onFocusLost(); else onFocusGained();
+});
+window.addEventListener('focus', onFocusGained);
+window.addEventListener('blur', onFocusLost);
+window.addEventListener('pageshow', onFocusGained);
+
+if (isUnfocused()) onFocusLost();
 </script>
 {% endblock %}

@@ -30,6 +30,7 @@ class Gif(models.Model):
     )
     title = models.CharField(max_length=200)
     file = models.FileField(upload_to="gifs/")
+    thumbnail = models.FileField(upload_to="thumbnails/", blank=True)
     tags = models.ManyToManyField(Tag, blank=True, related_name="gifs")
     copy_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
