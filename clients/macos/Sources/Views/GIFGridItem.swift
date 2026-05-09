@@ -62,6 +62,20 @@ struct GIFGridItem: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Copy direct GIF link")
+
+                Button { onRename() } label: {
+                    Image(systemName: "pencil")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help("Rename")
+
+                Button { onEditTags() } label: {
+                    Image(systemName: "tag")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help("Edit tags")
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)

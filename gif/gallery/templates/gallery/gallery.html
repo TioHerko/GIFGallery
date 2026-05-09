@@ -68,7 +68,7 @@
                 <img src="{% url 'gallery:serve_thumbnail' gif.id %}" alt="{{ gif.title }}" loading="lazy" class="w-full">
             </figure>
             <div class="flex items-center gap-1 px-2 py-1.5">
-                <span class="text-xs opacity-70 truncate flex-1 cursor-pointer" onclick="openRenameEditor(this.closest('.gif-card'))" title="Click to rename">{{ gif.title }}</span>
+                <span class="gif-title text-xs opacity-70 truncate flex-1 cursor-pointer" onclick="openRenameEditor(this.closest('.gif-card'))" title="Click to rename">{{ gif.title }}</span>
                 <button class="btn btn-xs btn-ghost opacity-50 hover:opacity-100" onclick="copyRawUrl(this.closest('.gif-card'))" title="Copy direct link">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 001.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clip-rule="evenodd"/>
@@ -241,9 +241,33 @@ document.getElementById('rename-save-btn').addEventListener('click', () => {
     .then(r => r.json())
     .then(data => {
         document.getElementById('rename-modal').close();
-        showToast('Title updated!', true);
+        if (data.title) updateCardTitle(renameCard, data.title);
+        showToast('Title updated!');
     });
 });
+
+function updateCardTitle(card, title) {
+    card.dataset.title = title;
+    const titleEl = card.querySelector('.gif-title');
+    if (titleEl) {
+        titleEl.textContent = title;
+        const img = card.querySelector('figure img');
+        if (img) img.alt = title;
+    }
+}
+
+function updateCardTags(card, tags) {
+    card.dataset.tags = tags.map(t => t.name).join(', ');
+    const container = card.querySelector('.tag-badges');
+    if (!container) return;
+    container.replaceChildren(...tags.map(t => {
+        const a = document.createElement('a');
+        a.href = `?tag=${encodeURIComponent(t.slug)}`;
+        a.className = 'btn btn-xs rounded-full btn-soft';
+        a.textContent = t.name;
+        return a;
+    }));
+}
 
 let activeCard = null;
 
@@ -301,9 +325,33 @@ document.getElementById('tag-save-btn').addEventListener('click', () => {
     .then(r => r.json())
     .then(data => {
         document.getElementById('tag-modal').close();
-        showToast('Tags updated!', true);
+        if (data.tags) {
+            updateCardTags(activeCard, data.tags);
+            syncTagBar(data.tags);
+        }
+        showToast('Tags updated!');
     });
 });
+
+function syncTagBar(tags) {
+    const existing = new Set();
+    tagBar.querySelectorAll('a').forEach(a => {
+        const m = a.getAttribute('href').match(/\?tag=([^&]+)/);
+        if (m) existing.add(decodeURIComponent(m[1]));
+    });
+    let added = false;
+    for (const t of tags) {
+        if (existing.has(t.slug)) continue;
+        const a = document.createElement('a');
+        a.href = `?tag=${encodeURIComponent(t.slug)}`;
+        a.className = 'btn btn-sm rounded-full btn-soft shrink-0';
+        a.textContent = t.name;
+        tagBar.appendChild(a);
+        existing.add(t.slug);
+        added = true;
+    }
+    if (added) checkTagOverflow();
+}
 
 // --- GIF pause/resume ---
 let gifsPaused = false;
