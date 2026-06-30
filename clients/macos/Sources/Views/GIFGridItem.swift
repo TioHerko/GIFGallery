@@ -6,6 +6,7 @@ struct GIFGridItem: View {
     let paused: Bool
     let onCopyEmbed: () -> Void
     let onCopyRaw: () -> Void
+    let onSendToDiscord: () -> Void
     let onEditTags: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
@@ -63,6 +64,13 @@ struct GIFGridItem: View {
                 .buttonStyle(.borderless)
                 .help("Copy direct GIF link")
 
+                Button { onSendToDiscord() } label: {
+                    Image(systemName: "paperplane.fill")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help("Send to Discord")
+
                 Button { onRename() } label: {
                     Image(systemName: "pencil")
                         .font(.caption)
@@ -86,6 +94,7 @@ struct GIFGridItem: View {
         .contextMenu {
             Button("Copy Embed URL") { onCopyEmbed() }
             Button("Copy Direct URL") { onCopyRaw() }
+            Button("Send to Discord") { onSendToDiscord() }
             Divider()
             Button("Edit Tags...") { onEditTags() }
             Button("Rename...") { onRename() }

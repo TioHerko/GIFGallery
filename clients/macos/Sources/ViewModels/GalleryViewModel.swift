@@ -106,6 +106,17 @@ final class GalleryViewModel {
         Task { try? await client?.trackCopy(id: gif.id) }
     }
 
+    func sendToDiscord(_ gif: GIFItem) async -> Bool {
+        do {
+            try await DiscordPaste.send(gif.url)
+            Task { try? await client?.trackCopy(id: gif.id) }
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func updateTags(_ gif: GIFItem, tags: String) async {
         guard let client else { return }
         do {

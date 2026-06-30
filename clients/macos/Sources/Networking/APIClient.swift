@@ -69,6 +69,7 @@ struct APIClient {
         var req = request("upload/")
         req.httpMethod = "POST"
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
 
         var body = Data()
         func appendField(_ name: String, _ value: String) {

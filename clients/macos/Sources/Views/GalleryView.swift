@@ -40,6 +40,13 @@ struct GalleryView: View {
                                         viewModel.copyRawURL(gif)
                                         flash("Direct URL copied")
                                     },
+                                    onSendToDiscord: {
+                                        Task {
+                                            if await viewModel.sendToDiscord(gif) {
+                                                flash("Sent to Discord")
+                                            }
+                                        }
+                                    },
                                     onEditTags: { viewModel.editingTagsGIF = gif },
                                     onRename: { viewModel.renamingGIF = gif },
                                     onDelete: { viewModel.deletingGIF = gif }
@@ -169,22 +176,30 @@ struct GalleryView: View {
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) {
-        let group = DispatchGroup()
-        var urls: [URL] = []
-        for provider in providers {
-            group.enter()
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
-                defer { group.leave() }
-                guard let data = data as? Data,
-                      let url = URL(dataRepresentation: data, relativeTo: nil),
+        Task {
+            var urls: [URL] = []
+            for provider in providers {
+                guard let url = await loadFileURL(from: provider),
                       url.pathExtension.lowercased() == "gif"
-                else { return }
+                else { continue }
                 urls.append(url)
             }
-        }
-        group.notify(queue: .main) {
             guard !urls.isEmpty else { return }
-            Task { await viewModel.upload(files: urls, tags: "", titlePrefix: "") }
+            await viewModel.upload(files: urls, tags: "", titlePrefix: "")
+        }
+    }
+
+    private func loadFileURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
+                guard let data = data as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil)
+                else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: url)
+            }
         }
     }
 }
