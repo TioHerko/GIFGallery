@@ -15,10 +15,22 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        node-version: '24' 
     - uses: maxim-lobanov/setup-xcode@v1
       with:
-          xcode-version: latest-stable
+        xcode-version: latest-stable
     - name: Build
-      run: swift build -v -c release
+      run: build.sh -c release --arch x86_64 --arch arm64
       working-directory: ./clients/macos/
-
+    - name: Package release
+      uses: urban233/create-dmg-actions@0.0.2
+      with:
+        dmg_name: 'GIFGallery Client'
+        src_dir: './clients/macos/build/GIF Gallery.app'
+    - name: 'Upload macOS Build Artifact'
+      uses: actions/upload-artifact@v4
+      with:
+        name: GIFGallery
+        path: builds/ProjectAnalyzer-macos
+      
