@@ -35,5 +35,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: GIFGallery
-          path: ${{ github.workspace }}/${{ steps.create-dmg.outputs.dmg_path }}
+          path: ${{ github.workspace }}/${{ steps.create-dmg.outputs.dmg_path }}/GIFGalleryClient.dmg
           archive: false
