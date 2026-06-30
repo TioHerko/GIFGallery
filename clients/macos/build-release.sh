@@ -5,9 +5,6 @@ cd "$(dirname "$0")"
 
 swift build "$@" -c release
 
-find ./ -iname 'GIFGallery'
-find .build/ -iname 'GIFGallery'
-
 APP="build/GIF Gallery.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
