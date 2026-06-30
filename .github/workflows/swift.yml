@@ -24,7 +24,7 @@ jobs:
         run: ./build-release.sh --arch x86_64 --arch arm64
         working-directory: ./clients/macos/
       - name: Package release
-        uses: urban233/create-dmg-actions@v0.0.2
+        uses: L-Super/create-dmg-actions@v1
         with:
           dmg_name: "GIFGalleryClient.dmg"
           src_dir: "./clients/macos/build/GIF Gallery.app"
@@ -32,4 +32,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: GIFGallery
-          path: ./clients/macos/build/GIFGalleryClient.dmg
+          path: ${{ github.workspace }}/${{ steps.create-dmg.outputs.dmg_path }}
