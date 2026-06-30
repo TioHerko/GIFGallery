@@ -21,7 +21,7 @@ jobs:
       with:
         xcode-version: latest-stable
     - name: Build
-      run: build.sh -c release --arch x86_64 --arch arm64
+      run: ./build.sh -c release --arch x86_64 --arch arm64
       working-directory: ./clients/macos/
     - name: Package release
       uses: urban233/create-dmg-actions@v0.0.2
