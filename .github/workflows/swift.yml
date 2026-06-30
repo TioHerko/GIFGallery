@@ -25,9 +25,10 @@ jobs:
         working-directory: ./clients/macos/
       - name: Package release
         uses: L-Super/create-dmg-actions@v1
+        working-directory: ./clients/macos/
         with:
           dmg_name: GIFGalleryClient
-          src_dir: "./clients/macos/build/GIF\ Gallery.app"
+          src_dir: "./build/GIF\\ Gallery.app"
       - name: "Upload macOS Build Artifact"
         uses: actions/upload-artifact@v4
         with:
