@@ -26,7 +26,7 @@ jobs:
       - name: Package release
         uses: L-Super/create-dmg-actions@v1
         with:
-          dmg_name: "GIFGalleryClient.dmg"
+          dmg_name: GIFGalleryClient
           src_dir: "./clients/macos/build/GIF Gallery.app"
       - name: "Upload macOS Build Artifact"
         uses: actions/upload-artifact@v4
