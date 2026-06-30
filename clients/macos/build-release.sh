@@ -13,7 +13,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 
 mkdir -p "$APP/Contents/Resources"
-cp .build/out/Products/Release/GIFGallery "$APP/Contents/MacOS/GIFGallery"
+cp .build/apple/Products/Release/GIFGallery "$APP/Contents/MacOS/GIFGallery"
 cp Sources/Info.plist "$APP/Contents/Info.plist"
 cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
