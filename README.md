@@ -99,7 +99,7 @@ container terminating TLS in front of the app. Create a `docker-compose.yml`:
 ```yaml
 services:
   app:
-    image: <your-dockerhub-username>/gifgallery:latest
+    image: tioherko/gifgallery:latest
     restart: unless-stopped
     environment:
       DJANGO_SECRET_KEY: "change-me-to-a-long-random-string"
