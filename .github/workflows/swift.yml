@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: macos-26
     permissions:
-      contents: write   # required to create releases / tags
+      contents: write # required to create releases / tags
 
     steps:
       - uses: actions/checkout@v4
@@ -52,4 +52,4 @@ jobs:
           prerelease: false
           files: ${{ github.workspace }}/GIFGalleryClient.dmg
           body: |
-            Built artifacts for GIF Gallery (the macOS application and corresponding container)
+            Built artifacts for GIF Gallery (the macOS application, for the moment. Unsigned.
