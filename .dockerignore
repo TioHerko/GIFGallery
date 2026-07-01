@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[oc]
+*.egg-info
+build/
+dist/
+wheels/
+
+# Virtual environments
+.venv/
+.build/
+
+# Django data — supplied at runtime via the /data volume
+**/db.sqlite3
+gif/media/
+gif/staticfiles/
+gif/gunicorn.ctl
+
+# macOS native client (not part of the Django app)
+clients/
+
+# VCS / editor / OS cruft
+.git/
+.github/
+.DS_Store
+*.tar.xz
+*.tar.bz2
+
+# Docker
+Dockerfile
+.dockerignore
