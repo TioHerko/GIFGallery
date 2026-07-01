@@ -12,6 +12,8 @@ on:
 jobs:
   build:
     runs-on: macos-26
+    permissions:
+      contents: write   # required to create releases / tags
 
     steps:
       - uses: actions/checkout@v4
@@ -37,15 +39,17 @@ jobs:
           name: GIFGallery
           path: ${{ github.workspace }}/${{ steps.create-dmg.outputs.dmg_path }}/GIFGalleryClient.dmg
           archive: false
-      - name: Create a Release in a GitHub Action
-        uses: comnoco/create-release-action@v2.0.5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create a draft release
+        # Only publish releases for pushes to main, not for pull requests.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
         with:
-          node-version: "24"
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          # github.ref on a branch push is "refs/heads/main", which is not a
+          # valid tag name, so derive a unique tag from the run number instead.
+          tag_name: build-${{ github.run_number }}
+          name: Release build-${{ github.run_number }}
           draft: true
           prerelease: false
+          files: ${{ github.workspace }}/GIFGalleryClient.dmg
           body: |
             Built artifacts for GIF Gallery (the macOS application and corresponding container)
