@@ -10,24 +10,36 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _env_list(name, default):
+    """Read a comma-separated environment variable into a list of strings."""
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-ubcb0qaiqyb)r1629@)ch5_n^f7o!k4yfba_$a%6d9!$dz4cp1'
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-ubcb0qaiqyb)r1629@)ch5_n^f7o!k4yfba_$a%6d9!$dz4cp1',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('1', 'true', 'yes')
 
-ALLOWED_HOSTS = ['gif.herko.me', '127.0.0.1']
+ALLOWED_HOSTS = _env_list('DJANGO_ALLOWED_HOSTS', ['gif.herko.me', '127.0.0.1'])
 
-CSRF_TRUSTED_ORIGINS = ['https://gif.herko.me']
+CSRF_TRUSTED_ORIGINS = _env_list('DJANGO_CSRF_TRUSTED_ORIGINS', ['https://gif.herko.me'])
 
 
 # Application definition
@@ -79,7 +91,7 @@ WSGI_APPLICATION = 'gif.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.environ.get('DJANGO_DB_PATH', BASE_DIR / 'db.sqlite3'),
     }
 }
 
@@ -123,7 +135,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Media files (uploads)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media')
 
 # Authentication
 LOGIN_URL = '/login/'
