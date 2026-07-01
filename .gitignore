@@ -8,6 +8,11 @@ wheels/
 .DS_Store
 *.tar.xz
 *.tar.bz2
+.build
+clients/macos/build
+clients/macos/.build
+clients/macos/.swiftpm
+
 
 # Virtual environments
 .venv

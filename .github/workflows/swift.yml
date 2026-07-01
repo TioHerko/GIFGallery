@@ -37,3 +37,14 @@ jobs:
           name: GIFGallery
           path: ${{ github.workspace }}/${{ steps.create-dmg.outputs.dmg_path }}/GIFGalleryClient.dmg
           archive: false
+      - name: Create a Release in a GitHub Action
+        uses: comnoco/create-release-action@v2.0.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: true
+          prerelease: false
+          body: |
+            Built artifacts for GIF Gallery (the macOS application and corresponding container)
