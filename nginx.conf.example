@@ -19,6 +19,10 @@ upstream gif_app {
     server unix:/run/gif/uvicorn.sock fail_timeout=0;
 }
 
+# Throttle login attempts (this file is included inside the http {} block,
+# so the zone can be declared here). 5 requests/minute per client IP.
+limit_req_zone $binary_remote_addr zone=gif_login:10m rate=5r/m;
+
 # Redirect HTTP to HTTPS
 server {
     listen 80;
@@ -51,14 +55,22 @@ server {
     }
 
     # --- Media / uploaded GIFs ---
-    # Nginx serves the files directly from disk for /media/ paths.
-    # However, the app serves GIFs through /gif/<id>/ with cache headers,
-    # so this block is mainly a fallback.
-    location /media/ {
-        alias /srv/gif/gif/media/;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        access_log off;
+    # Deliberately NOT served directly by nginx. Uploads keep their original
+    # filename, and nginx would pick the Content-Type from the extension —
+    # serving user uploads that way turns a stray non-GIF file into stored
+    # XSS on this origin. The app serves GIFs through /gif/<id>.gif with a
+    # forced image/gif content type and nosniff instead; nothing links to
+    # /media/ URLs.
+
+    # --- Login (rate-limited) ---
+    location = /login/ {
+        limit_req zone=gif_login burst=5 nodelay;
+        proxy_pass http://gif_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
     }
 
     # --- GIF serving (via Django, with nginx caching) ---

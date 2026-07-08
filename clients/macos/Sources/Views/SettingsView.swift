@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage("serverURL") private var serverURL = ""
-    @AppStorage("bearerToken") private var bearerToken = ""
+    @State private var bearerToken = KeychainStore.loadToken() ?? ""
     @State private var testStatus: String?
     @State private var isTesting = false
     @Environment(\.dismiss) private var dismiss
@@ -13,6 +13,9 @@ struct SettingsView: View {
                 TextField("URL", text: $serverURL, prompt: Text("https://gif.example.com"))
                     .textContentType(.URL)
                 SecureField("Bearer Token", text: $bearerToken, prompt: Text("Paste your API token"))
+                    .onChange(of: bearerToken) { _, newValue in
+                        KeychainStore.saveToken(newValue)
+                    }
             }
 
             Section {
@@ -45,8 +48,10 @@ struct SettingsView: View {
     }
 
     private func testConnection() {
-        guard let url = URL(string: serverURL) else {
-            testStatus = "Invalid URL"
+        guard let url = APIClient.validateBaseURL(serverURL) else {
+            testStatus = URL(string: serverURL) != nil
+                ? "URL must use https:// (http is allowed only for localhost)"
+                : "Invalid URL"
             return
         }
         isTesting = true

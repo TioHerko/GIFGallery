@@ -1,4 +1,5 @@
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db import models
 from django.db.models import F
@@ -6,11 +7,26 @@ import aiofiles
 from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.shortcuts import aget_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.http import content_disposition_header
 from django.utils.text import slugify
 
 from .auth import auth_required
 from .models import Gif, Tag
 from .thumbnails import build_thumbnail
+
+GIF_MAGIC = (b"GIF87a", b"GIF89a")
+
+
+def _validate_upload(f):
+    """Return an error string if the uploaded file is not an acceptable GIF."""
+    if f.size > settings.GIF_MAX_UPLOAD_BYTES:
+        max_mb = settings.GIF_MAX_UPLOAD_BYTES // (1024 * 1024)
+        return f"{f.name}: larger than {max_mb} MB"
+    header = f.read(6)
+    f.seek(0)
+    if header not in GIF_MAGIC:
+        return f"{f.name}: not a GIF file"
+    return None
 
 
 @login_required
@@ -56,7 +72,12 @@ async def serve_gif(request, gif_id):
 
     response = StreamingHttpResponse(stream_file(), content_type="image/gif")
     response["Cache-Control"] = "public, max-age=31536000, immutable"
-    response["Content-Disposition"] = f'inline; filename="{gif.title}.gif"'
+    # content_disposition_header handles quoting and non-latin-1 titles
+    # (RFC 5987) — raw interpolation breaks the header on quotes and 500s
+    # on e.g. emoji.
+    response["Content-Disposition"] = content_disposition_header(
+        as_attachment=False, filename=f"{gif.title}.gif"
+    )
     return response
 
 
@@ -158,6 +179,13 @@ async def upload_view(request):
         files = request.FILES.getlist("files")
         tag_names = request.POST.get("tags", "")
         title_prefix = request.POST.get("title_prefix", "").strip()
+
+        # Reject the batch if anything isn't a real GIF: uploads are stored
+        # under their original extension, so accepting arbitrary content
+        # (e.g. HTML/SVG) would plant scriptable files on this origin.
+        errors = [e for e in (_validate_upload(f) for f in files) if e]
+        if errors:
+            return JsonResponse({"errors": errors}, status=400)
 
         # Parse and create tags
         tags = []

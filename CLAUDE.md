@@ -36,6 +36,10 @@ uv run python manage.py collectstatic    # for production
 - **Tags**: simple `Tag` model with M2M, not django-taggit — avoids unnecessary dependency
 - **Auth**: Django built-in `LoginView`, no signup view. Accounts created only via `manage.py createsuperuser`
 - **GIF serving** (`/gif/<id>/`): public (no auth), returns `Cache-Control: public, max-age=31536000, immutable`
+- **Production hardening is gated on `DJANGO_SECRET_KEY`**: setting it enables Secure cookies, HSTS, and `SECURE_PROXY_SSL_HEADER`; without it the app runs in dev mode with a public fallback key. The Docker container refuses to start without it.
+- **Uploads are validated**: GIF magic bytes + `GIF_MAX_UPLOAD_BYTES` size cap, enforced in `upload_view`
+- **Bearer-token requests never fall back to session auth** (they're CSRF-exempt, so session fallback would be a CSRF bypass — see `gallery/auth.py`)
+- **CDN assets are version-pinned with SRI hashes** in `base.html`; upgrading requires recomputing the integrity hash
 - **Gallery/upload**: requires authentication
 - **UI**: DaisyUI v5 + Tailwind CSS v4 via CDN, dark theme (`data-theme="dark"`)
 - **No REST API / DRF** — server-rendered templates with minimal vanilla JS

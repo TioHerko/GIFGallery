@@ -29,10 +29,17 @@ def _env_list(name, default):
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    'django-insecure-ubcb0qaiqyb)r1629@)ch5_n^f7o!k4yfba_$a%6d9!$dz4cp1',
-)
+#
+# Production deployments MUST set DJANGO_SECRET_KEY (see gif.service.example /
+# Dockerfile). Providing it is also what switches on the HTTPS hardening
+# below; without it the app runs with a well-known development key and
+# plain-HTTP cookies so local `manage.py` use keeps working.
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+IS_PRODUCTION = SECRET_KEY is not None
+if not IS_PRODUCTION:
+    # Development only. This key is public (it lives in the repo) — never
+    # deploy with it.
+    SECRET_KEY = 'django-insecure-ubcb0qaiqyb)r1629@)ch5_n^f7o!k4yfba_$a%6d9!$dz4cp1'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('1', 'true', 'yes')
@@ -40,6 +47,23 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('1', 'true', 'yes')
 ALLOWED_HOSTS = _env_list('DJANGO_ALLOWED_HOSTS', ['gif.herko.me', '127.0.0.1'])
 
 CSRF_TRUSTED_ORIGINS = _env_list('DJANGO_CSRF_TRUSTED_ORIGINS', ['https://gif.herko.me'])
+
+if IS_PRODUCTION:
+    # TLS terminates at the reverse proxy (nginx.conf.example), which sets
+    # X-Forwarded-Proto. Without this, request.is_secure() is always False
+    # behind the unix socket, so build_absolute_uri() hands out http:// URLs
+    # (which API clients would then request with the bearer token in
+    # cleartext) and the Secure cookie flags could never be honored.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+# Per-file upload cap, enforced in the upload views. nginx applies the same
+# limit to the whole request body (client_max_body_size); this keeps a
+# proxyless deployment (e.g. the bare Docker container) capped too.
+GIF_MAX_UPLOAD_BYTES = int(os.environ.get('GIF_MAX_UPLOAD_BYTES', 50 * 1024 * 1024))
 
 
 # Application definition
