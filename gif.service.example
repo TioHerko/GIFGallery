@@ -9,8 +9,11 @@
 # To use:
 #   1. Copy to /etc/systemd/system/gif.service
 #   2. Adjust paths, user, and worker count as needed
-#   3. systemctl daemon-reload
-#   4. systemctl enable --now gif
+#   3. Generate a secret key and put it in /etc/gif/env (see below):
+#        python3 -c 'import secrets; print("DJANGO_SECRET_KEY=" + secrets.token_urlsafe(50))'
+#      then: chmod 600 /etc/gif/env
+#   4. systemctl daemon-reload
+#   5. systemctl enable --now gif
 
 [Unit]
 Description=GIF Gallery (uvicorn)
@@ -22,6 +25,11 @@ User=gif
 Group=gif
 WorkingDirectory=/srv/gif/gif
 RuntimeDirectory=gif
+
+# Required in production: DJANGO_SECRET_KEY. Setting it is also what enables
+# the app's HTTPS hardening (Secure cookies, HSTS, X-Forwarded-Proto trust).
+# Keep it out of this unit file — unit files are world-readable.
+EnvironmentFile=/etc/gif/env
 
 ExecStart=/srv/gif/.venv/bin/uvicorn gif.asgi:application \
     --uds /run/gif/uvicorn.sock \

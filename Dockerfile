@@ -52,5 +52,8 @@ USER app
 EXPOSE 8000
 
 # Apply migrations, then serve. The database is created on first run if the
-# mounted volume is empty.
-CMD ["sh", "-c", "python gif/manage.py migrate --noinput && uvicorn --app-dir gif gif.asgi:application --host 0.0.0.0 --port 8000"]
+# mounted volume is empty. Refuse to start without a real DJANGO_SECRET_KEY —
+# the in-repo fallback key is public, and providing one is also what enables
+# the app's HTTPS hardening. Generate one with:
+#   python3 -c 'import secrets; print(secrets.token_urlsafe(50))'
+CMD ["sh", "-c", ": \"${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY to a real secret (see README)}\" && python gif/manage.py migrate --noinput && uvicorn --app-dir gif gif.asgi:application --host 0.0.0.0 --port 8000"]

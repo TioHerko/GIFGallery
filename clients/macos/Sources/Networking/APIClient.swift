@@ -4,6 +4,19 @@ struct APIClient {
     let baseURL: URL
     let token: String
 
+    /// Accepts only https base URLs — the bearer token rides in a header on
+    /// every request, so plain http would put it on the wire in cleartext.
+    /// Loopback hosts may use http for local development.
+    static func validateBaseURL(_ string: String) -> URL? {
+        guard let url = URL(string: string),
+              let scheme = url.scheme?.lowercased(),
+              let host = url.host?.lowercased()
+        else { return nil }
+        if scheme == "https" { return url }
+        let isLoopback = host == "localhost" || host == "127.0.0.1" || host == "::1"
+        return (scheme == "http" && isLoopback) ? url : nil
+    }
+
     private var decoder: JSONDecoder {
         let d = JSONDecoder()
         d.keyDecodingStrategy = .convertFromSnakeCase

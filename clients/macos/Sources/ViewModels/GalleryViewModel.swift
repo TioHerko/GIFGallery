@@ -28,9 +28,8 @@ final class GalleryViewModel {
     private var client: APIClient? {
         guard let urlString = UserDefaults.standard.string(forKey: "serverURL"),
               !urlString.isEmpty,
-              let url = URL(string: urlString),
-              let token = UserDefaults.standard.string(forKey: "bearerToken"),
-              !token.isEmpty
+              let url = APIClient.validateBaseURL(urlString),
+              let token = KeychainStore.loadToken()
         else { return nil }
         return APIClient(baseURL: url, token: token)
     }

@@ -56,24 +56,28 @@ docker exec -it gif python gif/manage.py createsuperuser
 
 ### Configuration
 
-The image is configured through environment variables (all optional):
+The image is configured through environment variables:
 
 | Variable                      | Default                  | Purpose                                        |
 | ----------------------------- | ------------------------ | ---------------------------------------------- |
-| `DJANGO_SECRET_KEY`           | insecure dev key         | Django secret key — **set this in production** |
+| `DJANGO_SECRET_KEY`           | *(required)*             | Django secret key — the container refuses to start without one. Setting it also enables the HTTPS hardening (Secure cookies, HSTS, `X-Forwarded-Proto` trust) |
 | `DJANGO_DEBUG`                | `False`                  | Enable debug mode (`true`/`false`)             |
 | `DJANGO_ALLOWED_HOSTS`        | `gif.herko.me,127.0.0.1` | Comma-separated allowed hostnames              |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://gif.herko.me`   | Comma-separated trusted origins for CSRF       |
 | `DJANGO_DB_PATH`              | `/data/db.sqlite3`       | Path to the SQLite database file               |
 | `DJANGO_MEDIA_ROOT`           | `/data/media`            | Directory for uploaded GIFs                    |
+| `GIF_MAX_UPLOAD_BYTES`        | `52428800` (50 MB)       | Per-file upload size limit                     |
 
 ### Fronting it
 
-The container serves the app directly, but for production you still want a
-reverse proxy (nginx/Caddy/Cloudflare) in front of it — see
-`nginx.conf.example`. Static assets are collected into the image at build time;
-uploaded GIFs live in the `/data` volume and can be served straight from disk by
-the proxy for better performance.
+The container serves plain HTTP on port 8000 — **always put a TLS-terminating
+reverse proxy (nginx/Caddy/Cloudflare) in front of it** and have it forward
+`X-Forwarded-Proto`; see `nginx.conf.example`. The proxy should also cap
+request body size (nginx: `client_max_body_size 50m`). Static assets are
+collected into the image at build time. Don't configure the proxy to serve the
+`/data/media` directory directly: uploads keep their original filename, and a
+proxy picking `Content-Type` from the file extension is an XSS vector — let
+the app serve GIFs via `/gif/<id>.gif`, which forces `image/gif`.
 
 ## Deploying to production with Docker
 
