@@ -57,12 +57,12 @@ struct GIFGridItem: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button { onCopyRaw() } label: {
+                Button { onCopyEmbed() } label: {
                     Image(systemName: "link")
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
-                .help("Copy direct GIF link")
+                .help("Copy embed link")
 
                 Button { onSendToDiscord() } label: {
                     Image(systemName: "paperplane.fill")
@@ -90,10 +90,10 @@ struct GIFGridItem: View {
         }
         .background(Color(.controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .onTapGesture(perform: onCopyEmbed)
+        .onTapGesture(perform: onCopyRaw)
         .contextMenu {
-            Button("Copy Embed URL") { onCopyEmbed() }
             Button("Copy Direct URL") { onCopyRaw() }
+            Button("Copy Embed URL") { onCopyEmbed() }
             Button("Send to Discord") { onSendToDiscord() }
             Divider()
             Button("Edit Tags...") { onEditTags() }
