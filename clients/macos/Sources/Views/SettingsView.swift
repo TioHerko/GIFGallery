@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage("serverURL") private var serverURL = ""
+    @AppStorage("gridSize") private var gridSizeRaw = GridSize.medium.rawValue
     @State private var bearerToken = KeychainStore.loadToken() ?? ""
     @State private var testStatus: String?
     @State private var isTesting = false
@@ -16,6 +17,15 @@ struct SettingsView: View {
                     .onChange(of: bearerToken) { _, newValue in
                         KeychainStore.saveToken(newValue)
                     }
+            }
+
+            Section("Appearance") {
+                Picker("GIF Size", selection: $gridSizeRaw) {
+                    ForEach(GridSize.allCases) { size in
+                        Text(size.label).tag(size.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
             }
 
             Section {
@@ -44,7 +54,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 400, height: 200)
+        .frame(width: 400, height: 280)
     }
 
     private func testConnection() {

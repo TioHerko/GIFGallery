@@ -3,10 +3,17 @@ import UniformTypeIdentifiers
 
 struct GalleryView: View {
     @Bindable var viewModel: GalleryViewModel
+    @AppStorage("gridSize") private var gridSizeRaw = GridSize.medium.rawValue
     @State private var showSettings = false
     @State private var toastMessage: String?
 
-    private let columns = [GridItem(.adaptive(minimum: 200), spacing: 8)]
+    private var gridSize: GridSize {
+        GridSize(rawValue: gridSizeRaw) ?? .medium
+    }
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: gridSize.columnMinimum), spacing: 8)]
+    }
 
     var body: some View {
         NavigationStack {
@@ -32,6 +39,7 @@ struct GalleryView: View {
                                     gif: gif,
                                     gifData: viewModel.gifDataCache[gif.id],
                                     paused: viewModel.gifsPaused,
+                                    gridSize: gridSize,
                                     onCopyEmbed: {
                                         viewModel.copyEmbedURL(gif)
                                         flash("Embed URL copied")

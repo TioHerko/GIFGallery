@@ -4,6 +4,7 @@ struct GIFGridItem: View {
     let gif: GIFItem
     let gifData: Data?
     let paused: Bool
+    let gridSize: GridSize
     let onCopyEmbed: () -> Void
     let onCopyRaw: () -> Void
     let onSendToDiscord: () -> Void
@@ -16,23 +17,24 @@ struct GIFGridItem: View {
             ZStack(alignment: .topTrailing) {
                 if let data = gifData {
                     AnimatedGIFView(data: data, paused: paused)
-                        .frame(minHeight: 100, maxHeight: 300)
+                        .frame(minHeight: gridSize.minHeight, maxHeight: gridSize.maxHeight)
                         .clipped()
                 } else {
                     Rectangle()
                         .fill(.quaternary)
-                        .frame(height: 150)
+                        .frame(height: gridSize.placeholderHeight)
                         .overlay { ProgressView() }
                 }
-
-                if gif.copyCount > 0 {
-                    Text("\(gif.copyCount)")
-                        .font(.caption2.weight(.medium))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4))
-                        .padding(6)
-                }
+                
+                // Don't like the copy count
+//                if gif.copyCount > 0 {
+//                    Text("\(gif.copyCount)")
+//                        .font(.caption2.weight(.medium))
+//                        .padding(.horizontal, 5)
+//                        .padding(.vertical, 2)
+//                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4))
+//                        .padding(6)
+//                }
             }
 
             HStack(spacing: 4) {
