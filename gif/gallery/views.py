@@ -10,9 +10,11 @@ from django.urls import reverse
 from django.utils.http import content_disposition_header
 from django.utils.text import slugify
 
+from django.core.files.base import ContentFile
+
 from .auth import auth_required
 from .models import Gif, Tag
-from .thumbnails import build_thumbnail
+from .thumbnails import generate_thumbnail_bytes, thumbnail_filename
 
 GIF_MAGIC = (b"GIF87a", b"GIF89a")
 
@@ -206,7 +208,18 @@ async def upload_view(request):
                 title = title.rsplit(".", 1)[0]
             gif = await Gif.objects.acreate(title=title, file=f)
             await gif.tags.aset(tags)
-            await sync_to_async(build_thumbnail, thread_sensitive=False)(gif)
+            # Pillow work runs on a free thread, but the DB write must go
+            # through the request's connection (thread_sensitive default):
+            # writing from another thread means a second SQLite connection,
+            # which races the request and the startup backfill thread and
+            # fails with "database is locked".
+            data = await sync_to_async(generate_thumbnail_bytes, thread_sensitive=False)(
+                gif.file.path
+            )
+            if data is not None:
+                await sync_to_async(gif.thumbnail.save)(
+                    thumbnail_filename(gif), ContentFile(data)
+                )
             created.append(str(gif.id))
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
