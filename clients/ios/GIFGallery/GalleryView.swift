@@ -1,6 +1,5 @@
 import GIFKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct GalleryView: View {
     @Bindable var viewModel: GalleryViewModel
@@ -8,6 +7,7 @@ struct GalleryView: View {
     @State private var showSettings = false
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
+    @Environment(\.scenePhase) private var scenePhase
 
     private var gridSize: GridSize {
         GridSize(rawValue: gridSizeRaw) ?? .medium
@@ -69,9 +69,8 @@ struct GalleryView: View {
                         .padding()
                     }
                 }
-                .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-                    handleDrop(providers)
-                    return true
+                .refreshable {
+                    await viewModel.fetchGIFs()
                 }
             }
             .overlay(alignment: .bottom) {
@@ -86,31 +85,24 @@ struct GalleryView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: toastMessage)
+            .searchable(text: $viewModel.searchQuery)
+            .onChange(of: viewModel.searchQuery) {
+                viewModel.debouncedSearch()
+            }
             .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    HStack {
-                        TextField("Search", text: $viewModel.searchQuery)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 180)
-                            .onChange(of: viewModel.searchQuery) {
-                                viewModel.debouncedSearch()
-                            }
-
-                        Button { viewModel.showingUpload = true } label: {
-                            Label("Upload", systemImage: "arrow.up.circle")
-                        }
-
-                        Button { Task { await viewModel.fetchGIFs() } } label: {
-                            Label("Refresh", systemImage: "arrow.clockwise")
-                        }
-
-                        Button { showSettings = true } label: {
-                            Label("Settings", systemImage: "gearshape")
-                        }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { viewModel.showingUpload = true } label: {
+                        Label("Upload", systemImage: "arrow.up.circle")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSettings = true } label: {
+                        Label("Settings", systemImage: "gearshape")
                     }
                 }
             }
             .navigationTitle("GIF Gallery")
+            .navigationBarTitleDisplayMode(.inline)
         }
         .task { await viewModel.fetchGIFs() }
         .sheet(isPresented: $showSettings) { SettingsView() }
@@ -148,11 +140,12 @@ struct GalleryView: View {
         .onAppear {
             if !viewModel.isConfigured { showSettings = true }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-            viewModel.scheduleAutoPause()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            viewModel.cancelAutoPauseAndResume()
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                viewModel.cancelAutoPauseAndResume()
+            } else {
+                viewModel.scheduleAutoPause()
+            }
         }
     }
 
@@ -184,34 +177,6 @@ struct GalleryView: View {
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
             toastMessage = nil
-        }
-    }
-
-    private func handleDrop(_ providers: [NSItemProvider]) {
-        Task {
-            var urls: [URL] = []
-            for provider in providers {
-                guard let url = await loadFileURL(from: provider),
-                      url.pathExtension.lowercased() == "gif"
-                else { continue }
-                urls.append(url)
-            }
-            guard !urls.isEmpty else { return }
-            await viewModel.upload(files: urls, tags: "", titlePrefix: "")
-        }
-    }
-
-    private func loadFileURL(from provider: NSItemProvider) async -> URL? {
-        await withCheckedContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
-                guard let data = data as? Data,
-                      let url = URL(dataRepresentation: data, relativeTo: nil)
-                else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                continuation.resume(returning: url)
-            }
         }
     }
 }

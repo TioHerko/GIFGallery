@@ -1,3 +1,4 @@
+import GIFKit
 import SwiftUI
 import UniformTypeIdentifiers
 

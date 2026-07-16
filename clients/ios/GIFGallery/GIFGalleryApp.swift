@@ -8,11 +8,6 @@ struct GIFGalleryApp: App {
     var body: some Scene {
         WindowGroup {
             GalleryView(viewModel: Self.viewModel)
-                .frame(minWidth: 600, minHeight: 400)
-        }
-
-        Settings {
-            SettingsView()
         }
     }
 }
