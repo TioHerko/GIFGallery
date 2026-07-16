@@ -17,6 +17,25 @@ TINY_GIF = (
 TEMP_MEDIA = tempfile.mkdtemp(prefix="gif-test-media-")
 
 
+def _wide_animated_gif_bytes(width=400, height=300, frames=3):
+    """An animated GIF wide enough to trigger thumbnail generation."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    images = [Image.new("P", (width, height), color=i * 60) for i in range(frames)]
+    out = BytesIO()
+    images[0].save(
+        out,
+        format="GIF",
+        save_all=True,
+        append_images=images[1:],
+        duration=80,
+        loop=0,
+    )
+    return out.getvalue()
+
+
 @override_settings(MEDIA_ROOT=TEMP_MEDIA)
 class UploadValidationTests(TestCase):
     def setUp(self):
@@ -34,6 +53,16 @@ class UploadValidationTests(TestCase):
         response = self.upload("cat.gif", TINY_GIF)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Gif.objects.count(), 1)
+
+    def test_wide_gif_upload_creates_thumbnail(self):
+        # Wider than THUMB_MAX_WIDTH, so the upload also generates and saves
+        # a thumbnail. Regression test: the thumbnail save used to run on a
+        # thread_sensitive=False worker, writing through a second SQLite
+        # connection and dying with "database table is locked".
+        response = self.upload("wide.gif", _wide_animated_gif_bytes())
+        self.assertEqual(response.status_code, 200)
+        gif = Gif.objects.get()
+        self.assertTrue(gif.thumbnail.name, "thumbnail was not attached")
 
     def test_non_gif_rejected(self):
         response = self.upload("evil.html", b"<script>alert(1)</script>")
