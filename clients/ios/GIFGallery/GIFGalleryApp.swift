@@ -5,6 +5,10 @@ import SwiftUI
 struct GIFGalleryApp: App {
     static let viewModel = GalleryViewModel()
 
+    init() {
+        APIClient.installPersistentCache()
+    }
+
     var body: some Scene {
         WindowGroup {
             GalleryView(viewModel: Self.viewModel)

@@ -4,6 +4,17 @@ public struct APIClient: Sendable {
     public let baseURL: URL
     public let token: String
 
+    /// Replaces the default URLCache (a few MB of disk) with one big enough
+    /// to keep GIF previews across launches. The server marks GIFs and
+    /// thumbnails `Cache-Control: public, max-age=31536000, immutable`, so
+    /// cached entries never need revalidation. Call once at app startup.
+    public static func installPersistentCache(
+        memoryBytes: Int = 32 * 1024 * 1024,
+        diskBytes: Int = 512 * 1024 * 1024
+    ) {
+        URLCache.shared = URLCache(memoryCapacity: memoryBytes, diskCapacity: diskBytes)
+    }
+
     public init(baseURL: URL, token: String) {
         self.baseURL = baseURL
         self.token = token
