@@ -20,3 +20,13 @@ clients/macos/.swiftpm
 # Django
 *.sqlite3
 gif/media/
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+.swiftpm/

@@ -1,3 +1,4 @@
+import GIFKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -6,6 +7,7 @@ struct GalleryView: View {
     @AppStorage("gridSize") private var gridSizeRaw = GridSize.medium.rawValue
     @State private var showSettings = false
     @State private var toastMessage: String?
+    @State private var toastTask: Task<Void, Never>?
 
     private var gridSize: GridSize {
         GridSize(rawValue: gridSizeRaw) ?? .medium
@@ -177,8 +179,10 @@ struct GalleryView: View {
 
     private func flash(_ msg: String) {
         toastMessage = msg
-        Task {
+        toastTask?.cancel()
+        toastTask = Task {
             try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
             toastMessage = nil
         }
     }
