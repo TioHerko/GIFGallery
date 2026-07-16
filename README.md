@@ -45,6 +45,17 @@ docker run -d --name gif \
 The container runs database migrations automatically on startup and creates the
 database on first run if the volume is empty.
 
+> **Upgrading from images built before the security hardening (July 2026):**
+> the app now runs as a non-root user (`app`, uid 10001). Volumes created by
+> older images are owned by root, which makes every upload fail with a
+> `PermissionError` (HTTP 500) while reads keep working. Fix the volume once:
+>
+> ```bash
+> docker compose exec -u root app chown -R app:app /data
+> ```
+>
+> Fresh volumes are initialized with the right ownership and don't need this.
+
 ### Create a user
 
 Accounts can only be created from the command line (there is no signup page).
@@ -58,15 +69,15 @@ docker exec -it gif python gif/manage.py createsuperuser
 
 The image is configured through environment variables:
 
-| Variable                      | Default                  | Purpose                                        |
-| ----------------------------- | ------------------------ | ---------------------------------------------- |
-| `DJANGO_SECRET_KEY`           | *(required)*             | Django secret key — the container refuses to start without one. Setting it also enables the HTTPS hardening (Secure cookies, HSTS, `X-Forwarded-Proto` trust) |
-| `DJANGO_DEBUG`                | `False`                  | Enable debug mode (`true`/`false`)             |
-| `DJANGO_ALLOWED_HOSTS`        | `gif.herko.me,127.0.0.1` | Comma-separated allowed hostnames              |
-| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://gif.herko.me`   | Comma-separated trusted origins for CSRF       |
-| `DJANGO_DB_PATH`              | `/data/db.sqlite3`       | Path to the SQLite database file               |
-| `DJANGO_MEDIA_ROOT`           | `/data/media`            | Directory for uploaded GIFs                    |
-| `GIF_MAX_UPLOAD_BYTES`        | `52428800` (50 MB)       | Per-file upload size limit                     |
+| Variable                      | Default                  | Purpose                                                                                                                                                       |
+| ----------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DJANGO_SECRET_KEY`           | _(required)_             | Django secret key — the container refuses to start without one. Setting it also enables the HTTPS hardening (Secure cookies, HSTS, `X-Forwarded-Proto` trust) |
+| `DJANGO_DEBUG`                | `False`                  | Enable debug mode (`true`/`false`)                                                                                                                            |
+| `DJANGO_ALLOWED_HOSTS`        | `gif.herko.me,127.0.0.1` | Comma-separated allowed hostnames                                                                                                                             |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://gif.herko.me`   | Comma-separated trusted origins for CSRF                                                                                                                      |
+| `DJANGO_DB_PATH`              | `/data/db.sqlite3`       | Path to the SQLite database file                                                                                                                              |
+| `DJANGO_MEDIA_ROOT`           | `/data/media`            | Directory for uploaded GIFs                                                                                                                                   |
+| `GIF_MAX_UPLOAD_BYTES`        | `52428800` (50 MB)       | Per-file upload size limit                                                                                                                                    |
 
 ### Fronting it
 
@@ -90,10 +101,6 @@ building locally:
 ```bash
 docker pull tioherko/gifgallery:latest
 ```
-
-(Replace `<your-dockerhub-username>` with the account configured in the
-`DOCKERHUB_USERNAME` repository variable. If you'd rather build on the server,
-`docker build -t gifgallery .` from a checkout works too.)
 
 ### docker compose
 
