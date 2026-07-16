@@ -167,3 +167,29 @@ LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Django's default console handler is gated on DEBUG, so with DEBUG off,
+# unhandled request errors (500s) log nothing — tracebacks go only to the
+# unconfigured admin-email handler. Log them to stderr unconditionally so
+# `docker logs` always shows why a request failed.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {
+            'format': '{levelname} {asctime} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'root': {'handlers': ['console'], 'level': 'WARNING'},
+    'loggers': {
+        'django': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'gallery': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+    },
+}
