@@ -97,7 +97,10 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
-          DMG="${{ steps.create-dmg.outputs.dmg_path }}/GIFGalleryClient.dmg"
+          # create-dmg-actions@v1 writes "<dmg_name>.dmg" into the workspace
+          # root and exposes it as the `dmg_name` output (not `dmg_path`), so
+          # reference the fixed path directly.
+          DMG="$GITHUB_WORKSPACE/GIFGalleryClient.dmg"
           codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
           xcrun notarytool submit "$DMG" \
             --key "$RUNNER_TEMP/api_key.p8" \
@@ -108,13 +111,11 @@ jobs:
           # Remove the decoded private key from the runner.
           rm -f "$RUNNER_TEMP/api_key.p8"
 
-      - name: Show path
-        run: echo '${{ github.workspace }}/${{ steps.create-dmg.outputs.dmg_path }}'
       - name: "Upload macOS Build Artifact"
         uses: actions/upload-artifact@v7
         with:
           name: GIFGallery
-          path: ${{ steps.create-dmg.outputs.dmg_path }}/GIFGalleryClient.dmg
+          path: ${{ github.workspace }}/GIFGalleryClient.dmg
           archive: false
       - name: Create a draft release
         # Only publish releases for pushes to main, not for pull requests.
@@ -127,7 +128,7 @@ jobs:
           name: Release build-${{ github.run_number }}
           draft: true
           prerelease: false
-          files: ${{ steps.create-dmg.outputs.dmg_path }}/GIFGalleryClient.dmg
+          files: ${{ github.workspace }}/GIFGalleryClient.dmg
           body: |
             Built artifacts for GIF Gallery (the macOS application).
             Signed with Developer ID and notarized by Apple.
