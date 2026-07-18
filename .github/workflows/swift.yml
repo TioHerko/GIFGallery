@@ -17,27 +17,104 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          node-version: "24"
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
       - name: Build
         run: ./build-release.sh --arch x86_64 --arch arm64
         working-directory: ./clients/macos/
+
+      # ── Signing & notarization ──────────────────────────────────────────
+      # Only sign/notarize on pushes to main, where the secrets are available.
+      # Pull requests (especially from forks) cannot read secrets, so they
+      # build unsigned and skip every step below guarded by this same `if`.
+      - name: Set up signing keychain
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          chmod +x .github/workflows/ephemeral_keychain.sh
+          .github/workflows/ephemeral_keychain.sh
+
+      - name: Detect signing identity
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          IDENTITY=$(security find-identity -v -p codesigning build.keychain \
+            | grep "Developer ID Application" | head -1 | sed -E 's/.*"(.*)"/\1/')
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::No 'Developer ID Application' identity found in the keychain."
+            security find-identity -v -p codesigning build.keychain
+            exit 1
+          fi
+          echo "Using signing identity: $IDENTITY"
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Codesign app (Hardened Runtime)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: ./clients/macos
+        run: |
+          codesign --force --deep --options runtime --timestamp \
+            --entitlements GIFGallery.entitlements \
+            --sign "$SIGN_IDENTITY" build/GIFGallery.app
+          codesign --verify --strict --verbose=2 build/GIFGallery.app
+
+      - name: Decode notary API key
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          echo "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/api_key.p8"
+
+      - name: Notarize and staple app
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: ./clients/macos
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          ditto -c -k --keepParent build/GIFGallery.app "$RUNNER_TEMP/GIFGallery.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/GIFGallery.zip" \
+            --key "$RUNNER_TEMP/api_key.p8" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --wait
+          # Staple the ticket into the .app so Gatekeeper validates it offline.
+          xcrun stapler staple build/GIFGallery.app
+
       - name: Package release
+        id: create-dmg
         uses: L-Super/create-dmg-actions@v1
         with:
           dmg_name: GIFGalleryClient
           src_dir: ./clients/macos/build/GIFGallery.app
           background: ./clients/macos/bg.svg
+
+      - name: Sign, notarize and staple DMG
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          DMG="${{ steps.create-dmg.outputs.dmg_path }}/GIFGalleryClient.dmg"
+          codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
+          xcrun notarytool submit "$DMG" \
+            --key "$RUNNER_TEMP/api_key.p8" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$DMG"
+          # Remove the decoded private key from the runner.
+          rm -f "$RUNNER_TEMP/api_key.p8"
+
       - name: Show path
         run: echo '${{ github.workspace }}/${{ steps.create-dmg.outputs.dmg_path }}'
       - name: "Upload macOS Build Artifact"
         uses: actions/upload-artifact@v7
         with:
           name: GIFGallery
-          path: ${{ github.workspace }}/${{ steps.create-dmg.outputs.dmg_path }}/GIFGalleryClient.dmg
+          path: ${{ steps.create-dmg.outputs.dmg_path }}/GIFGalleryClient.dmg
           archive: false
       - name: Create a draft release
         # Only publish releases for pushes to main, not for pull requests.
@@ -50,6 +127,7 @@ jobs:
           name: Release build-${{ github.run_number }}
           draft: true
           prerelease: false
-          files: ${{ github.workspace }}/GIFGalleryClient.dmg
+          files: ${{ steps.create-dmg.outputs.dmg_path }}/GIFGalleryClient.dmg
           body: |
-            Built artifacts for GIF Gallery (the macOS application, for the moment. Unsigned.
+            Built artifacts for GIF Gallery (the macOS application).
+            Signed with Developer ID and notarized by Apple.
