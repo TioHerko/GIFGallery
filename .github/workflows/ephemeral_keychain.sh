@@ -11,22 +11,25 @@ security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
 security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
 
 echo "$MACOS_CERT_P12_BASE64" | base64 --decode > /tmp/cert.p12
-# -f pkcs12 makes the format explicit; with set -e a bad password now fails the
-# job here (the real error) instead of silently leaving an empty keychain.
+# Watch the output line: "1 identity imported" means cert + private key landed;
+# "1 certificate imported" means the .p12 has NO private key (the failure mode
+# that makes set-key-partition-list report SecItemCopyMatching not-found).
+echo "── security import ──"
 security import /tmp/cert.p12 -f pkcs12 -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" \
   -T /usr/bin/codesign -T /usr/bin/productsign
 rm -f /tmp/cert.p12
 
-# The step everyone forgets — without this, codesign blocks on a GUI prompt forever:
-security set-key-partition-list -S apple-tool:,apple:,codesign: \
-  -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+echo "── All identities (cert+key pairs) in the keychain ──"
+security find-identity "$KEYCHAIN"
+echo "── Private keys in the keychain ──"
+security find-key "$KEYCHAIN" 2>/dev/null || echo "(no keys / find-key unsupported)"
 
-# Diagnostics. `-v` lists only identities valid for codesigning; the plain call
-# lists ALL of them, including invalid ones with the reason. If the identity
-# appears in the plain list but not the `-v` list, the cert chain is incomplete
-# (missing Developer ID intermediate). If it appears in neither, the import
-# itself didn't bring in a usable key+cert pair.
+# The step everyone forgets — without this, codesign blocks on a GUI prompt
+# forever. It fails with SecItemCopyMatching when no private key was imported;
+# keep it non-fatal so the diagnostics above are visible in the log.
+security set-key-partition-list -S apple-tool:,apple:,codesign: \
+  -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" || \
+  echo "::warning::set-key-partition-list failed — no private key in the keychain?"
+
 echo "── Valid codesigning identities ──"
 security find-identity -v -p codesigning "$KEYCHAIN"
-echo "── All identities (including invalid) ──"
-security find-identity "$KEYCHAIN"
