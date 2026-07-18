@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -14,12 +14,18 @@
 		A100000000000000000000A2 /* GIFGallery.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GIFGallery.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		A100000000000000000000A3 /* GIFGallery */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = GIFGallery;
-			sourceTree = "<group>";
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		2746FA9D300C0751002F453C /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A100000000000000000000A7 /* GIFGallery */;
 		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A100000000000000000000A3 /* GIFGallery */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (2746FA9D300C0751002F453C /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = GIFGallery; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -104,7 +110,6 @@
 			packageReferences = (
 				A100000000000000000000D1 /* XCLocalSwiftPackageReference "../GIFKit" */,
 			);
-			preferredProjectObjectVersion = 77;
 			productRefGroup = A100000000000000000000A6 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -193,9 +198,12 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GIFGallery/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "GIF Gallery";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -218,9 +226,12 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GIFGallery/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "GIF Gallery";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -265,7 +276,7 @@
 /* Begin XCLocalSwiftPackageReference section */
 		A100000000000000000000D1 /* XCLocalSwiftPackageReference "../GIFKit" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = "../GIFKit";
+			relativePath = ../GIFKit;
 		};
 /* End XCLocalSwiftPackageReference section */
 

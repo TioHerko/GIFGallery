@@ -30,3 +30,6 @@ xcuserdata/
 *.xcuserstate
 DerivedData/
 .swiftpm/
+
+# Local signing config (Team ID, etc.) — never commit
+signing.local.sh
