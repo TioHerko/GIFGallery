@@ -13,6 +13,10 @@ mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Resources"
 cp .build/debug/GIFGallery "$APP/Contents/MacOS/GIFGallery"
 cp Sources/Info.plist "$APP/Contents/Info.plist"
+# Fresh CFBundleVersion per build: LaunchServices treats an unchanged version
+# as the same registration, and the Shortcuts indexer then skips re-scanning
+# the app's App Intents metadata.
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(date +%y%m%d.%H%M%S)" "$APP/Contents/Info.plist"
 cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 mkdir -p "$APPEX/Contents/MacOS"
@@ -28,10 +32,28 @@ cp ShareExtension/Info.plist "$APPEX/Contents/Info.plist"
 # signature so the appex at least launches, minus credential sharing.
 [ -f signing.local.sh ] && source ./signing.local.sh
 TEAM_ID="${DEVELOPMENT_TEAM:-}"
-IDENTITY=""
-if [ -n "$TEAM_ID" ]; then
-  IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
-    | grep "Apple Development" | grep "$TEAM_ID" | head -1 | sed -E 's/.*"(.*)"/\1/' || true)
+IDENTITY="${SIGNING_IDENTITY:-}"
+if [ -n "$TEAM_ID" ] && [ -z "$IDENTITY" ]; then
+  # Prefer Developer ID: an "Apple Development" signature only runs with an
+  # embedded provisioning profile (Gatekeeper blocks it as "malware" without
+  # one), and this bundle has no profile. A locally built Developer ID app is
+  # never quarantined, so it runs without notarization.
+  # Match the team via the certificate's OU (the display name carries the
+  # personal cert ID instead) and sign by SHA-1 hash — duplicate cert copies
+  # make names ambiguous to codesign.
+  ALL_CERTS=$(security find-certificate -a -Z -p 2>/dev/null)
+  for KIND in "Developer ID Application" "Apple Development"; do
+    while read -r HASH; do
+      if printf '%s\n' "$ALL_CERTS" \
+        | awk -v h="$HASH" '/^SHA-1 hash:/{keep=($3==h)} /-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/{if(keep)print}' \
+        | openssl x509 -noout -subject 2>/dev/null | grep -q "OU *= *$TEAM_ID"; then
+        IDENTITY="$HASH"
+        break
+      fi
+    done < <(security find-identity -v -p codesigning 2>/dev/null \
+      | grep "$KIND" | sed -E 's/^ *[0-9]+\) ([0-9A-F]+) .*/\1/')
+    [ -n "$IDENTITY" ] && break
+  done
 fi
 
 if [ -n "$IDENTITY" ]; then

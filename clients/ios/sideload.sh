@@ -62,6 +62,12 @@ cat > "$EXPORT_PLIST" <<PLIST
 </plist>
 PLIST
 
+# Fresh CFBundleVersion per build (applies to the app and the share extension
+# alike): iOS only re-scans an app's App Intents metadata when the bundle
+# version changes, so reinstalling with a fixed version leaves Shortcuts
+# showing the previously indexed (possibly empty) action list.
+BUILD_VERSION=$(date +%y%m%d.%H%M%S)
+
 # -allowProvisioningUpdates lets xcodebuild create/download the Apple Development
 # cert and a development provisioning profile automatically via your Xcode account.
 echo "── Archiving ──"
@@ -72,7 +78,8 @@ xcodebuild archive \
   -destination 'generic/platform=iOS' \
   -archivePath "$ARCHIVE" \
   -allowProvisioningUpdates \
-  DEVELOPMENT_TEAM="$TEAM_ID"
+  DEVELOPMENT_TEAM="$TEAM_ID" \
+  CURRENT_PROJECT_VERSION="$BUILD_VERSION"
 
 echo "── Exporting development-signed .ipa ──"
 xcodebuild -exportArchive \

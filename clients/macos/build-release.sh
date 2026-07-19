@@ -17,6 +17,9 @@ mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Resources"
 cp "$BIN/GIFGallery" "$APP/Contents/MacOS/GIFGallery"
 cp Sources/Info.plist "$APP/Contents/Info.plist"
+# Fresh CFBundleVersion per build — see build.sh; without it Shortcuts keeps
+# serving the previously indexed (possibly empty) App Intents metadata.
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(date +%y%m%d.%H%M%S)" "$APP/Contents/Info.plist"
 cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # Share extension bundle; CI signs it (with its own entitlements) before
