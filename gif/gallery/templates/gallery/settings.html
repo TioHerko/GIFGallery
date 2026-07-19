@@ -124,6 +124,69 @@
             {% endif %}
         </div>
     </div>
+
+    {% if is_admin %}
+    <!-- Users (admin only) -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title text-lg">Users</h2>
+
+            {% if create_user_form.errors %}
+            <div role="alert" class="alert alert-error alert-sm">
+                <ul class="list-disc list-inside text-sm">
+                    {% for field in create_user_form %}{% for error in field.errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}{% endfor %}
+                    {% for error in create_user_form.non_field_errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'gallery:create_user' %}" class="flex gap-2 items-end mt-2">
+                {% csrf_token %}
+                <div class="form-control flex-1">
+                    <label class="label" for="id_username"><span class="label-text">Username</span></label>
+                    <input type="text" name="username" id="id_username"
+                           class="input input-bordered input-sm w-full" required>
+                </div>
+                <div class="form-control flex-1">
+                    <label class="label" for="id_password1"><span class="label-text">Password</span></label>
+                    <input type="password" name="password1" id="id_password1"
+                           class="input input-bordered input-sm w-full" required>
+                </div>
+                <div class="form-control flex-1">
+                    <label class="label" for="id_password2"><span class="label-text">Confirm</span></label>
+                    <input type="password" name="password2" id="id_password2"
+                           class="input input-bordered input-sm w-full" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm rounded-btn">Create user</button>
+            </form>
+
+            {% if users %}
+            <table class="table table-sm mt-4">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Role</th>
+                        <th>Joined</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr>
+                        <td>{{ u.username }}</td>
+                        <td>{% if u.is_superuser %}Admin{% else %}User{% endif %}</td>
+                        <td class="whitespace-nowrap opacity-70">{{ u.date_joined|date:"Y-m-d H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <script>

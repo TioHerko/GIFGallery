@@ -53,6 +53,7 @@ class UploadValidationTests(TestCase):
         response = self.upload("cat.gif", TINY_GIF)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Gif.objects.count(), 1)
+        self.assertEqual(Gif.objects.first().owner, self.user)
 
     def test_wide_gif_upload_creates_thumbnail(self):
         # Wider than THUMB_MAX_WIDTH, so the upload also generates and saves
@@ -89,6 +90,76 @@ class UploadValidationTests(TestCase):
 
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA)
+class UserIsolationTests(TestCase):
+    """Each user should only see and manage their own GIFs."""
+
+    def setUp(self):
+        self.alice = User.objects.create_user("alice", password="pw")
+        self.bob = User.objects.create_user("bob", password="pw")
+        self.alice_gif = Gif.objects.create(
+            title="alice", owner=self.alice,
+            file=SimpleUploadedFile("a.gif", TINY_GIF),
+        )
+        self.bob_gif = Gif.objects.create(
+            title="bob", owner=self.bob,
+            file=SimpleUploadedFile("b.gif", TINY_GIF),
+        )
+
+    def test_gallery_only_shows_own_gifs(self):
+        client = Client()
+        client.force_login(self.alice)
+        response = client.get("/")
+        self.assertContains(response, "alice")
+        self.assertNotContains(response, "bob")
+
+    def test_api_only_shows_own_gifs(self):
+        _, token = APIToken.create_token(self.alice)
+        client = Client(headers={"Authorization": f"Bearer {token}"})
+        response = client.get("/api/gifs/")
+        gifs = response.json()["gifs"]
+        self.assertEqual(len(gifs), 1)
+        self.assertEqual(gifs[0]["title"], "alice")
+
+    def test_cannot_rename_other_users_gif(self):
+        client = Client()
+        client.force_login(self.alice)
+        response = client.post(
+            f"/gif/{self.bob_gif.id}/rename/",
+            {"title": "stolen"},
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_cannot_delete_other_users_gif(self):
+        client = Client()
+        client.force_login(self.alice)
+        response = client.post(
+            f"/gif/{self.bob_gif.id}/delete/",
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Gif.objects.filter(id=self.bob_gif.id).exists())
+
+    def test_bearer_token_only_shows_own_gifs(self):
+        _, token = APIToken.create_token(self.bob)
+        client = Client(headers={"Authorization": f"Bearer {token}"})
+        response = client.get("/api/gifs/")
+        gifs = response.json()["gifs"]
+        self.assertEqual(len(gifs), 1)
+        self.assertEqual(gifs[0]["title"], "bob")
+
+    def test_cannot_tag_other_users_gif(self):
+        client = Client()
+        client.force_login(self.alice)
+        response = client.post(
+            f"/gif/{self.bob_gif.id}/tags/",
+            {"tags": "hacked"},
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+        self.assertEqual(response.status_code, 404)
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA)
 class BearerAuthCsrfTests(TestCase):
     """The CSRF exemption for bearer requests must apply only when the
     token actually validates — an invalid token must never lift CSRF for a
@@ -98,7 +169,8 @@ class BearerAuthCsrfTests(TestCase):
         self.user = User.objects.create_user("u", password="pw")
         _, self.raw_token = APIToken.create_token(self.user)
         self.gif = Gif.objects.create(
-            title="t", file=SimpleUploadedFile("t.gif", TINY_GIF)
+            title="t", owner=self.user,
+            file=SimpleUploadedFile("t.gif", TINY_GIF),
         )
         self.csrf_client = Client(enforce_csrf_checks=True)
 
@@ -135,9 +207,13 @@ class BearerAuthCsrfTests(TestCase):
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA)
 class ServeGifTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("u", password="pw")
+
     def make_gif(self, title):
         return Gif.objects.create(
-            title=title, file=SimpleUploadedFile("t.gif", TINY_GIF)
+            title=title, owner=self.user,
+            file=SimpleUploadedFile("t.gif", TINY_GIF),
         )
 
     def get(self, gif):
@@ -165,8 +241,7 @@ class ServeGifTests(TestCase):
 
 
 class FirstRunSetupTests(TestCase):
-    """With no accounts, /login/ hands off to /setup/, which creates the
-    one account; once any account exists, /setup/ is permanently closed."""
+    """Setup is first-run only: creates the admin account, then closes permanently."""
 
     def test_login_redirects_to_setup_when_no_users(self):
         response = self.client.get("/login/")
@@ -191,7 +266,6 @@ class FirstRunSetupTests(TestCase):
         self.assertTrue(user.is_superuser)
         self.assertTrue(user.is_staff)
         self.assertTrue(user.check_password("correct-horse-battery"))
-        # The new user is logged in and can see the gallery immediately.
         self.assertEqual(self.client.get("/").status_code, 200)
 
     def test_setup_closed_once_user_exists(self):
@@ -227,6 +301,58 @@ class FirstRunSetupTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.exists())
+
+
+class AdminCreateUserTests(TestCase):
+    """Only the admin (superuser) can create additional user accounts via
+    the settings page."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            "admin", password="adminpw", is_superuser=True, is_staff=True
+        )
+        self.client.force_login(self.admin)
+
+    def test_admin_can_create_user(self):
+        response = self.client.post(
+            "/settings/users/create/",
+            {
+                "username": "newuser",
+                "password1": "correct-horse-battery",
+                "password2": "correct-horse-battery",
+            },
+        )
+        self.assertRedirects(response, "/settings/")
+        user = User.objects.get(username="newuser")
+        self.assertFalse(user.is_superuser)
+        self.assertFalse(user.is_staff)
+
+    def test_regular_user_cannot_create_user(self):
+        regular = User.objects.create_user("regular", password="pw")
+        self.client.force_login(regular)
+        response = self.client.post(
+            "/settings/users/create/",
+            {
+                "username": "intruder",
+                "password1": "correct-horse-battery",
+                "password2": "correct-horse-battery",
+            },
+        )
+        self.assertRedirects(response, "/settings/")
+        self.assertFalse(User.objects.filter(username="intruder").exists())
+
+    def test_settings_page_shows_users_section_to_admin(self):
+        User.objects.create_user("regular", password="pw")
+        response = self.client.get("/settings/")
+        self.assertContains(response, "Users")
+        self.assertContains(response, "admin")
+        self.assertContains(response, "regular")
+
+    def test_settings_page_hides_users_section_from_regular(self):
+        regular = User.objects.create_user("regular", password="pw")
+        self.client.force_login(regular)
+        response = self.client.get("/settings/")
+        self.assertNotContains(response, "Users")
 
 
 class SettingsPageTests(TestCase):

@@ -28,6 +28,13 @@ class Gif(models.Model):
     id = models.CharField(
         primary_key=True, max_length=12, default=generate_nanoid, editable=False
     )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="gifs",
+        null=True,
+        blank=True,
+    )
     title = models.CharField(max_length=200)
     file = models.FileField(upload_to="gifs/")
     thumbnail = models.FileField(upload_to="thumbnails/", blank=True)
