@@ -24,3 +24,6 @@ cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 mkdir -p "$APPEX/Contents/MacOS"
 cp "$BIN/ShareExtension" "$APPEX/Contents/MacOS/ShareExtension"
 cp ShareExtension/Info.plist "$APPEX/Contents/Info.plist"
+
+# Shortcuts discovery — must land inside the bundle before CI signs it.
+./extract-appintents.sh Release "$APP"

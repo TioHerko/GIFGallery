@@ -19,6 +19,9 @@ mkdir -p "$APPEX/Contents/MacOS"
 cp .build/debug/ShareExtension "$APPEX/Contents/MacOS/ShareExtension"
 cp ShareExtension/Info.plist "$APPEX/Contents/Info.plist"
 
+# Shortcuts discovery — must land inside the bundle before signing.
+./extract-appintents.sh Debug "$APP"
+
 # The share extension only registers (and can only reach the shared app-group
 # credentials) in a signed build. With a Team ID available, development-sign
 # both bundles with the full entitlements; otherwise fall back to an ad-hoc
