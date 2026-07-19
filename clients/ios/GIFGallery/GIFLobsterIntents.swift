@@ -7,6 +7,7 @@
 import AppIntents
 import Foundation
 import GIFKit
+import UniformTypeIdentifiers
 
 /// A GIF from the gallery, exposed to Shortcuts with its URLs and tags so
 /// actions can be chained (e.g. random GIF → copy its embed URL).
@@ -102,11 +103,18 @@ struct RandomGIFIntent: AppIntent {
         }
     }
 
-    func perform() async throws -> some IntentResult & ReturnsValue<GIFEntity> {
-        guard let gif = try await IntentSupport.gifs(tag: tag).randomElement() else {
+    func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> {
+        let client = try IntentSupport.client()
+        guard let gif = try await client.listGIFs(tag: tag).randomElement(),
+              let url = URL(string: gif.url) else {
             throw IntentError.noMatches
         }
-        return .result(value: gif)
+        // Download the actual GIF bytes so Shortcuts gets an image it can
+        // save/share/preview, not just the entity metadata.
+        let data = try await client.fetchGIFData(from: url)
+        let safeName = gif.title.replacingOccurrences(of: "/", with: "-")
+        let file = IntentFile(data: data, filename: "\(safeName).gif", type: .gif)
+        return .result(value: file)
     }
 }
 

@@ -140,7 +140,7 @@ public struct APIClient: Sendable {
 
     public func fetchGIFData(from url: URL) async throws -> Data {
         var req = URLRequest(url: url)
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.cachePolicy = .returnCacheDataElseLoad
         let (data, _) = try await URLSession.shared.data(for: req)
         return data
     }
