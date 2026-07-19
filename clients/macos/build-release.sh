@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 swift build "$@" -c release
 
-APP="build/GIFGallery.app"
+APP="build/GIF Lobster.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 
