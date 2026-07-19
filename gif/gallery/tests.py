@@ -162,3 +162,157 @@ class ServeGifTests(TestCase):
         response = self.get(self.make_gif('a"b'))
         self.assertEqual(response.status_code, 200)
         self.assertIn('\\"', response["Content-Disposition"])
+
+
+class FirstRunSetupTests(TestCase):
+    """With no accounts, /login/ hands off to /setup/, which creates the
+    one account; once any account exists, /setup/ is permanently closed."""
+
+    def test_login_redirects_to_setup_when_no_users(self):
+        response = self.client.get("/login/")
+        self.assertRedirects(response, "/setup/")
+
+    def test_login_renders_normally_once_user_exists(self):
+        User.objects.create_user("u", password="pw")
+        response = self.client.get("/login/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_setup_creates_superuser_and_logs_in(self):
+        response = self.client.post(
+            "/setup/",
+            {
+                "username": "admin",
+                "password1": "correct-horse-battery",
+                "password2": "correct-horse-battery",
+            },
+        )
+        self.assertRedirects(response, "/")
+        user = User.objects.get(username="admin")
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(user.is_staff)
+        self.assertTrue(user.check_password("correct-horse-battery"))
+        # The new user is logged in and can see the gallery immediately.
+        self.assertEqual(self.client.get("/").status_code, 200)
+
+    def test_setup_closed_once_user_exists(self):
+        User.objects.create_user("u", password="pw")
+        self.assertRedirects(self.client.get("/setup/"), "/login/")
+        response = self.client.post(
+            "/setup/",
+            {
+                "username": "intruder",
+                "password1": "correct-horse-battery",
+                "password2": "correct-horse-battery",
+            },
+        )
+        self.assertRedirects(response, "/login/")
+        self.assertFalse(User.objects.filter(username="intruder").exists())
+
+    def test_password_mismatch_rejected(self):
+        response = self.client.post(
+            "/setup/",
+            {
+                "username": "admin",
+                "password1": "correct-horse-battery",
+                "password2": "different-entirely",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.exists())
+
+    def test_weak_password_rejected(self):
+        response = self.client.post(
+            "/setup/",
+            {"username": "admin", "password1": "pw", "password2": "pw"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.exists())
+
+
+class SettingsPageTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("u", password="old-horse-battery")
+        self.client.force_login(self.user)
+
+    def test_requires_login(self):
+        response = Client().get("/settings/")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response["Location"].startswith("/login/"))
+
+    def test_settings_page_renders(self):
+        APIToken.create_token(self.user, name="my laptop")
+        response = self.client.get("/settings/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "my laptop")
+
+    def test_change_password(self):
+        response = self.client.post(
+            "/settings/password/",
+            {
+                "old_password": "old-horse-battery",
+                "new_password1": "new-horse-battery",
+                "new_password2": "new-horse-battery",
+            },
+        )
+        self.assertRedirects(response, "/settings/")
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("new-horse-battery"))
+        # update_session_auth_hash keeps the current session logged in.
+        self.assertEqual(self.client.get("/settings/").status_code, 200)
+
+    def test_change_password_wrong_old_password(self):
+        response = self.client.post(
+            "/settings/password/",
+            {
+                "old_password": "wrong",
+                "new_password1": "new-horse-battery",
+                "new_password2": "new-horse-battery",
+            },
+        )
+        self.assertEqual(response.status_code, 200)  # re-rendered with errors
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("old-horse-battery"))
+
+    def test_create_token_shows_raw_token_once(self):
+        response = self.client.post(
+            "/settings/tokens/create/",
+            {"description": "phone"},
+            follow=True,
+        )
+        token = APIToken.objects.get(user=self.user, name="phone")
+        raw = response.context["new_token"]["token"]
+        self.assertEqual(APIToken.hash_token(raw), token.token_hash)
+        self.assertContains(response, raw)
+        # A second visit no longer shows the raw token anywhere.
+        response = self.client.get("/settings/")
+        self.assertNotContains(response, raw)
+
+    def test_created_token_authenticates(self):
+        response = self.client.post(
+            "/settings/tokens/create/", {"description": "phone"}, follow=True
+        )
+        raw = response.context["new_token"]["token"]
+        api = Client(headers={"Authorization": f"Bearer {raw}"})
+        self.assertEqual(api.get("/api/gifs/").status_code, 200)
+
+    def test_create_token_requires_description(self):
+        response = self.client.post(
+            "/settings/tokens/create/", {"description": "   "}
+        )
+        self.assertRedirects(response, "/settings/")
+        self.assertFalse(APIToken.objects.exists())
+
+    def test_delete_token(self):
+        token, raw = APIToken.create_token(self.user, name="old phone")
+        response = self.client.post(f"/settings/tokens/{token.id}/delete/")
+        self.assertRedirects(response, "/settings/")
+        self.assertFalse(APIToken.objects.filter(id=token.id).exists())
+        api = Client(headers={"Authorization": f"Bearer {raw}"})
+        self.assertEqual(api.get("/api/gifs/").status_code, 401)
+
+    def test_cannot_delete_other_users_token(self):
+        other = User.objects.create_user("other", password="pw")
+        token, _ = APIToken.create_token(other, name="not yours")
+        response = self.client.post(f"/settings/tokens/{token.id}/delete/")
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(APIToken.objects.filter(id=token.id).exists())

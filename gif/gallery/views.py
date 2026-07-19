@@ -1,7 +1,17 @@
 from asgiref.sync import sync_to_async
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import (
+    get_user_model,
+    login as auth_login,
+    update_session_auth_hash,
+)
 from django.contrib.auth.decorators import login_required
-from django.db import models
+from django.contrib.auth.forms import PasswordChangeForm, UserCreationForm
+from django.contrib.auth.views import LoginView
+from django.db import models, transaction
+from django.shortcuts import get_object_or_404
+from django.views.decorators.http import require_POST
 from django.db.models import F
 import aiofiles
 from django.http import Http404, JsonResponse, StreamingHttpResponse
@@ -13,7 +23,7 @@ from django.utils.text import slugify
 from django.core.files.base import ContentFile
 
 from .auth import auth_required
-from .models import Gif, Tag
+from .models import APIToken, Gif, Tag
 from .thumbnails import generate_thumbnail_bytes, thumbnail_filename
 
 GIF_MAGIC = (b"GIF87a", b"GIF89a")
@@ -29,6 +39,112 @@ def _validate_upload(f):
     if header not in GIF_MAGIC:
         return f"{f.name}: not a GIF file"
     return None
+
+
+class FirstRunLoginView(LoginView):
+    """LoginView that hands off to /setup/ until an account exists."""
+
+    template_name = "gallery/login.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not get_user_model().objects.exists():
+            return redirect("setup")
+        return super().dispatch(request, *args, **kwargs)
+
+
+def setup_view(request):
+    """One-time first-run page: create the (single) account, then log in.
+
+    Only reachable while the user table is empty; afterwards it permanently
+    redirects to the login page, so it can never be used to add accounts.
+    """
+    User = get_user_model()
+    if User.objects.exists():
+        return redirect("login")
+
+    form = UserCreationForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            # Re-check inside the transaction so two concurrent submissions
+            # can't both create an account.
+            if User.objects.exists():
+                return redirect("login")
+            user = form.save(commit=False)
+            # Same powers createsuperuser would grant, including /admin/.
+            user.is_staff = True
+            user.is_superuser = True
+            user.save()
+        auth_login(request, user)
+        return redirect("gallery:gallery")
+
+    return render(request, "gallery/setup.html", {"form": form})
+
+
+TOKEN_DESCRIPTION_MAX = APIToken._meta.get_field("name").max_length
+
+
+def _render_settings(request, password_form=None):
+    # Raw tokens are only stored hashed, so a freshly created one is stashed
+    # in the session by create_token_view and shown exactly once here.
+    new_token = request.session.pop("new_api_token", None)
+    return render(
+        request,
+        "gallery/settings.html",
+        {
+            "password_form": password_form or PasswordChangeForm(request.user),
+            "tokens": request.user.api_tokens.order_by("-created_at"),
+            "new_token": new_token,
+        },
+    )
+
+
+@login_required
+def settings_view(request):
+    return _render_settings(request)
+
+
+@login_required
+@require_POST
+def change_password_view(request):
+    form = PasswordChangeForm(request.user, request.POST)
+    if form.is_valid():
+        user = form.save()
+        # Password changes rotate the session auth hash; without this the
+        # current session would be logged out immediately.
+        update_session_auth_hash(request, user)
+        messages.success(request, "Password changed.")
+        return redirect("gallery:settings")
+    return _render_settings(request, password_form=form)
+
+
+@login_required
+@require_POST
+def create_token_view(request):
+    description = request.POST.get("description", "").strip()
+    if not description:
+        messages.error(request, "A description is required.")
+        return redirect("gallery:settings")
+    if len(description) > TOKEN_DESCRIPTION_MAX:
+        messages.error(
+            request,
+            f"Description must be at most {TOKEN_DESCRIPTION_MAX} characters.",
+        )
+        return redirect("gallery:settings")
+    _, raw_token = APIToken.create_token(request.user, name=description)
+    request.session["new_api_token"] = {
+        "token": raw_token,
+        "description": description,
+    }
+    return redirect("gallery:settings")
+
+
+@login_required
+@require_POST
+def delete_token_view(request, token_id):
+    token = get_object_or_404(APIToken, id=token_id, user=request.user)
+    token.delete()
+    messages.success(request, f"Token “{token.name}” deleted.")
+    return redirect("gallery:settings")
 
 
 @login_required

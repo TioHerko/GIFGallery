@@ -1,0 +1,138 @@
+{% extends "gallery/base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="navbar bg-base-100 shadow-sm px-4 sticky top-0 z-10">
+    <div class="flex-1">
+        <a href="/" class="text-lg font-bold tracking-tight">GIFs</a>
+    </div>
+    <div class="flex-none gap-2">
+        <a href="/" class="btn btn-sm btn-ghost rounded-btn">Gallery</a>
+        <a href="{% url 'logout' %}" class="btn btn-sm btn-ghost rounded-btn">Logout</a>
+    </div>
+</div>
+
+<div class="max-w-2xl mx-auto px-4 py-6 space-y-6">
+    <h1 class="text-2xl font-bold">Settings</h1>
+
+    {% for message in messages %}
+    <div role="alert" class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %} alert-sm">
+        <span>{{ message }}</span>
+    </div>
+    {% endfor %}
+
+    <!-- Change password -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title text-lg">Change password</h2>
+            {% if password_form.errors %}
+            <div role="alert" class="alert alert-error alert-sm">
+                <ul class="list-disc list-inside text-sm">
+                    {% for field in password_form %}{% for error in field.errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}{% endfor %}
+                    {% for error in password_form.non_field_errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            <form method="post" action="{% url 'gallery:change_password' %}" class="space-y-4">
+                {% csrf_token %}
+                <div class="form-control">
+                    <label class="label" for="id_old_password"><span class="label-text">Current password</span></label>
+                    <input type="password" name="old_password" id="id_old_password"
+                           autocomplete="current-password"
+                           class="input input-bordered w-full" required>
+                </div>
+                <div class="form-control">
+                    <label class="label" for="id_new_password1"><span class="label-text">New password</span></label>
+                    <input type="password" name="new_password1" id="id_new_password1"
+                           autocomplete="new-password"
+                           class="input input-bordered w-full" required>
+                </div>
+                <div class="form-control">
+                    <label class="label" for="id_new_password2"><span class="label-text">Confirm new password</span></label>
+                    <input type="password" name="new_password2" id="id_new_password2"
+                           autocomplete="new-password"
+                           class="input input-bordered w-full" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm rounded-btn">Change password</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- API tokens -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title text-lg">API tokens</h2>
+            <p class="text-sm opacity-70">
+                Tokens authenticate the desktop and mobile clients
+                (<code>Authorization: Bearer …</code>). Each token is shown
+                only once, right after it is created.
+            </p>
+
+            {% if new_token %}
+            <div role="alert" class="alert alert-success">
+                <div class="min-w-0 w-full">
+                    <p class="font-semibold">Token for “{{ new_token.description }}” created — copy it now, it won't be shown again:</p>
+                    <div class="flex items-center gap-2 mt-2">
+                        <code id="new-token-value" class="bg-base-100 text-base-content rounded px-2 py-1 text-sm break-all flex-1">{{ new_token.token }}</code>
+                        <button type="button" class="btn btn-sm rounded-btn" onclick="copyToken(this)">Copy</button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'gallery:create_token' %}" class="flex gap-2 items-end mt-2">
+                {% csrf_token %}
+                <div class="form-control flex-1">
+                    <label class="label" for="id_description"><span class="label-text">Description</span></label>
+                    <input type="text" name="description" id="id_description"
+                           placeholder="e.g. MacBook client" maxlength="100"
+                           class="input input-bordered input-sm w-full" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm rounded-btn">Create token</button>
+            </form>
+
+            {% if tokens %}
+            <table class="table table-sm mt-4">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Created</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for token in tokens %}
+                    <tr>
+                        <td class="break-all">{{ token.name }}</td>
+                        <td class="whitespace-nowrap opacity-70">{{ token.created_at|date:"Y-m-d H:i" }}</td>
+                        <td class="text-right">
+                            <form method="post" action="{% url 'gallery:delete_token' token.id %}"
+                                  onsubmit="return confirm('Delete token “{{ token.name|escapejs }}”? Clients using it will stop working.')">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-xs btn-ghost text-error rounded-btn">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-sm opacity-50 mt-4">No tokens yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function copyToken(btn) {
+    const el = document.getElementById('new-token-value');
+    navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    });
+}
+</script>
+{% endblock %}

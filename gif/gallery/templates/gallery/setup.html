@@ -1,0 +1,47 @@
+{% extends "gallery/base.html" %}
+{% block title %}Welcome{% endblock %}
+{% block content %}
+<div class="flex items-center justify-center min-h-screen">
+    <div class="card bg-base-100 shadow-xl w-full max-w-sm">
+        <div class="card-body">
+            <h2 class="card-title text-2xl justify-center mb-2">Welcome!</h2>
+            <p class="text-sm text-base-content/70 text-center mb-2">
+                Create your account to get started. This page only appears
+                once — remember these credentials.
+            </p>
+            {% if form.errors %}
+            <div role="alert" class="alert alert-error alert-sm">
+                <ul class="list-disc list-inside text-sm">
+                    {% for field in form %}{% for error in field.errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}{% endfor %}
+                    {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+                <div class="form-control">
+                    <label class="label" for="id_username"><span class="label-text">Username</span></label>
+                    <input type="text" name="username" id="id_username" autofocus
+                           value="{{ form.username.value|default:'' }}"
+                           class="input input-bordered w-full" required>
+                </div>
+                <div class="form-control">
+                    <label class="label" for="id_password1"><span class="label-text">Password</span></label>
+                    <input type="password" name="password1" id="id_password1"
+                           class="input input-bordered w-full" required>
+                </div>
+                <div class="form-control">
+                    <label class="label" for="id_password2"><span class="label-text">Confirm password</span></label>
+                    <input type="password" name="password2" id="id_password2"
+                           class="input input-bordered w-full" required>
+                </div>
+                <button type="submit" class="btn btn-primary rounded-btn w-full">Create account</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
