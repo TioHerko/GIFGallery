@@ -70,7 +70,10 @@ struct GalleryView: View {
                     }
                 }
                 .refreshable {
-                    await viewModel.fetchGIFs()
+                    // Run the fetch outside the refresh task: SwiftUI cancels
+                    // that task as soon as the view updates, which would kill
+                    // the request mid-flight.
+                    await Task { await viewModel.fetchGIFs() }.value
                 }
             }
             .overlay(alignment: .bottom) {
@@ -105,7 +108,11 @@ struct GalleryView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .task { await viewModel.fetchGIFs() }
-        .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showSettings, onDismiss: {
+            // First-run: the launch fetch bailed while unconfigured, so load
+            // as soon as the user closes settings with a server configured.
+            Task { await viewModel.fetchGIFsIfConfigured() }
+        }) { SettingsView() }
         .sheet(isPresented: $viewModel.showingUpload) {
             UploadSheet(viewModel: viewModel)
         }
