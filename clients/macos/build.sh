@@ -31,7 +31,7 @@ cp DockTilePlugin/Info.plist "$DOCKTILE/Contents/Info.plist"
 cp DockTilePlugin/DockIcon.png "$DOCKTILE/Contents/Resources/DockIcon.png"
 
 # Shortcuts discovery — must land inside the bundle before signing.
-./extract-appintents.sh Debug "$APP"
+./extract-appintents.sh Debug "$APP" "$(swift build --show-bin-path)"
 
 # The share extension only registers (and can only reach the shared app-group
 # credentials) in a signed build. With a Team ID available, development-sign
