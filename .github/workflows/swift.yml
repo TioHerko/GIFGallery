@@ -63,6 +63,9 @@ jobs:
           # Sign inside-out. The share extension gets its own (sandboxed)
           # entitlements first — `--deep` would clobber them with the app's.
           codesign --force --options runtime --timestamp \
+            --sign "$SIGN_IDENTITY" \
+            "build/GIF Lobster.app/Contents/PlugIns/GIF Lobster Dock.docktileplugin"
+          codesign --force --options runtime --timestamp \
             --entitlements build/entitlements/appex.entitlements \
             --sign "$SIGN_IDENTITY" \
             "build/GIF Lobster.app/Contents/PlugIns/GIF Lobster Share.appex"

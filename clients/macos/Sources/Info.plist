@@ -14,6 +14,8 @@
     <string>APPL</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>NSDockTilePlugIn</key>
+    <string>GIF Lobster Dock.docktileplugin</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
