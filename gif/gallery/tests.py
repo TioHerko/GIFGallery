@@ -316,3 +316,15 @@ class SettingsPageTests(TestCase):
         response = self.client.post(f"/settings/tokens/{token.id}/delete/")
         self.assertEqual(response.status_code, 404)
         self.assertTrue(APIToken.objects.filter(id=token.id).exists())
+
+
+class FaviconTests(TestCase):
+    def test_root_favicon_redirects_to_static(self):
+        response = self.client.get("/favicon.ico")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/static/gallery/favicon.ico")
+
+    def test_pages_link_favicon(self):
+        User.objects.create_user("u", password="pw")
+        response = self.client.get("/login/")
+        self.assertContains(response, "/static/gallery/favicon-32.png")
