@@ -70,9 +70,17 @@ public enum SharedStore {
     }
 
     #if os(macOS)
-    /// The Team ID from this process's code signature (nil when unsigned or
-    /// ad-hoc signed).
+    /// The Team ID from the app bundle's Info.plist (embedded at build time),
+    /// or nil if not set. This avoids relying on the code signature, which
+    /// differs between ad-hoc and Developer ID signing.
     private static func teamIdentifier() -> String? {
+        // First try the embedded TeamID key (set by build.sh / build-release.sh)
+        if let team = Bundle.main.object(forInfoDictionaryKey: "TeamID") as? String,
+           !team.isEmpty {
+            return team
+        }
+        // Fallback: extract from code signature (for backwards compat with
+        // already-deployed apps that don't have the embedded key).
         var code: SecCode?
         guard SecCodeCopySelf(SecCSFlags(), &code) == errSecSuccess, let code else { return nil }
         var staticCode: SecStaticCode?

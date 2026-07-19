@@ -37,3 +37,10 @@ cp DockTilePlugin/DockIcon.png "$DOCKTILE/Contents/Resources/DockIcon.png"
 
 # Shortcuts discovery — must land inside the bundle before CI signs it.
 ./extract-appintents.sh Release "$APP" "$BIN"
+
+# Embed the Team ID into the app bundle so SharedStore uses a stable
+# app group identifier regardless of how the app is signed.
+TEAM_ID="${DEVELOPMENT_TEAM:-}"
+if [ -n "$TEAM_ID" ]; then
+  /usr/libexec/PlistBuddy -c "Add :TeamID string $TEAM_ID" "$APP/Contents/Info.plist"
+fi

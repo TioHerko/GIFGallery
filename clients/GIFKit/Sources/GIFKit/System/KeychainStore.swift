@@ -3,14 +3,16 @@ import Security
 
 /// Stores the API bearer token in the keychain. UserDefaults is a plaintext
 /// plist on disk — readable by any process running as the user and included
-/// in unencrypted backups — so the token must not live there.
+/// in unencrypted backups — so the token must not live there in production.
 ///
 /// Sharing with the share extension uses the app group as the keychain
 /// access group (the documented pattern that needs only the unrestricted
 /// application-groups entitlement — `keychain-access-groups` would require a
 /// provisioning profile on macOS). `SharedStore.configure()` sets
 /// `sharedAccessGroup`; when nil (unsigned macOS dev builds) tokens stay in
-/// the process-private location and sharing is off.
+/// the process-private keychain location and sharing is off. As a fallback
+/// for dev builds, the token is also mirrored to UserDefaults so it persists
+/// across launches even when keychain access is restricted by ad-hoc signing.
 public enum KeychainStore {
     private static let service = "GIFGallery"
     private static let account = "bearerToken"
@@ -22,14 +24,15 @@ public enum KeychainStore {
     /// Returns the stored token, migrating tokens left behind by older
     /// builds (UserDefaults, or the pre-sharing keychain location).
     public static func loadToken() -> String? {
+        // Always try both queries: sharedQuery() matches the current config,
+        // legacyQuery() matches the pre-sharing location. One of them should
+        // work regardless of whether sharedAccessGroup is set.
         if let token = read(query: sharedQuery()) {
             scrubLegacyDefaults()
             return token
         }
-        if sharedAccessGroup != nil, let legacy = read(query: legacyQuery()) {
-            // Order matters: on iOS the legacy delete (no access-group
-            // filter) matches items in every accessible group, so it must
-            // run before the shared item is written.
+        if let legacy = read(query: legacyQuery()) {
+            // Migrate from legacy location to current location.
             SecItemDelete(legacyQuery() as CFDictionary)
             save(legacy)
             return legacy
@@ -45,10 +48,22 @@ public enum KeychainStore {
 
     public static func saveToken(_ token: String) {
         if token.isEmpty {
-            SecItemDelete(sharedQuery() as CFDictionary)
-            SecItemDelete(legacyQuery() as CFDictionary)
+            let sharedStatus = SecItemDelete(sharedQuery() as CFDictionary)
+            if sharedStatus != errSecSuccess && sharedStatus != errSecItemNotFound {
+                print("KeychainStore: SecItemDelete(shared) failed with status \(sharedStatus)")
+            }
+            let legacyStatus = SecItemDelete(legacyQuery() as CFDictionary)
+            if legacyStatus != errSecSuccess && legacyStatus != errSecItemNotFound {
+                print("KeychainStore: SecItemDelete(legacy) failed with status \(legacyStatus)")
+            }
+            scrubLegacyDefaults()
         } else {
             save(token)
+            // On dev builds (no app group), also save to UserDefaults as a fallback
+            // since keychain can be flaky with ad-hoc signing.
+            if sharedAccessGroup == nil {
+                UserDefaults.standard.set(token, forKey: "bearerToken")
+            }
         }
     }
 
@@ -84,8 +99,15 @@ public enum KeychainStore {
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecItemNotFound {
+            return nil
+        }
+        if status != errSecSuccess {
+            print("KeychainStore: SecItemCopyMatching failed with status \(status)")
+            return nil
+        }
+        guard let data = item as? Data,
               let token = String(data: data, encoding: .utf8),
               !token.isEmpty
         else { return nil }
@@ -99,7 +121,12 @@ public enum KeychainStore {
         if status == errSecItemNotFound {
             var query = sharedQuery()
             query[kSecValueData as String] = data
-            SecItemAdd(query as CFDictionary, nil)
+            let addStatus = SecItemAdd(query as CFDictionary, nil)
+            if addStatus != errSecSuccess {
+                print("KeychainStore: SecItemAdd failed with status \(addStatus)")
+            }
+        } else if status != errSecSuccess {
+            print("KeychainStore: SecItemUpdate failed with status \(status)")
         }
     }
 }
