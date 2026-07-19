@@ -14,5 +14,13 @@ urlpatterns = [
     path("gif/<str:gif_id>/copy/", views.copy_gif_view, name="copy_gif"),
     path("gif/<str:gif_id>/delete/", views.delete_gif_view, name="delete_gif"),
     path("upload/", views.upload_view, name="upload"),
+    path("settings/", views.settings_view, name="settings"),
+    path("settings/password/", views.change_password_view, name="change_password"),
+    path("settings/tokens/create/", views.create_token_view, name="create_token"),
+    path(
+        "settings/tokens/<int:token_id>/delete/",
+        views.delete_token_view,
+        name="delete_token",
+    ),
     path("api/gifs/", views.api_list_gifs, name="api_list_gifs"),
 ]

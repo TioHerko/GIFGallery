@@ -24,7 +24,7 @@ uv run uvicorn gif.asgi:application --reload  # dev server (ASGI)
 uv run python manage.py test             # run tests
 uv run python manage.py makemigrations   # after model changes
 uv run python manage.py migrate          # apply migrations
-uv run python manage.py createsuperuser  # create a user (only way to create accounts)
+uv run python manage.py createsuperuser  # create extra accounts (first one comes from /setup/)
 uv run python manage.py collectstatic    # for production
 ```
 
@@ -34,7 +34,7 @@ uv run python manage.py collectstatic    # for production
 - **SQLite** database — single-user, no concurrency concerns
 - **Nanoid IDs** (12-char) on `Gif` model instead of UUIDs — shorter URLs, uses `nanoid` library
 - **Tags**: simple `Tag` model with M2M, not django-taggit — avoids unnecessary dependency
-- **Auth**: Django built-in `LoginView`, no signup view. Accounts created only via `manage.py createsuperuser`
+- **Auth**: Django built-in `LoginView` + one-time `/setup/` page. On first run (empty user table) `/login/` redirects to `/setup/`, which creates the single superuser account and logs in; once any account exists `/setup/` always redirects to `/login/`. No signup view; extra accounts only via `manage.py createsuperuser`
 - **GIF serving** (`/gif/<id>/`): public (no auth), returns `Cache-Control: public, max-age=31536000, immutable`
 - **Production hardening is gated on `DJANGO_SECRET_KEY`**: setting it enables Secure cookies, HSTS, and `SECURE_PROXY_SSL_HEADER`; without it the app runs in dev mode with a public fallback key. The Docker container refuses to start without it.
 - **Uploads are validated**: GIF magic bytes + `GIF_MAX_UPLOAD_BYTES` size cap, enforced in `upload_view`
@@ -52,6 +52,8 @@ uv run python manage.py collectstatic    # for production
 | `/gif/<id>/` | No | Serve GIF file (public, cached) |
 | `/gif/<id>/tags/` | Yes | POST to update tags (JSON response) |
 | `/upload/` | Yes | Multi-file upload with drag-drop |
-| `/login/` | No | Login form |
+| `/settings/` | Yes | Change password, create/list/delete API tokens |
+| `/login/` | No | Login form (redirects to `/setup/` while no account exists) |
+| `/setup/` | No | First-run account creation (closed once an account exists) |
 | `/logout/` | Yes | Logout |
 | `/admin/` | Staff | Django admin |
