@@ -17,7 +17,19 @@ APP="${2:?usage: extract-appintents.sh <Debug|Release> <app-bundle-path>}"
 # Must match the platforms line in Package.swift.
 DEPLOYMENT_TARGET=15.0
 
-INT_BASE=".build/out/Intermediates.noindex/GIFGallery.build/$CONFIG/GIFGallery-p.build/Objects-normal"
+# The build root moves between toolchains (.build/out vs .build/apple);
+# derive it from the products symlink (e.g. release -> out/Products/Release)
+# instead of hardcoding, mirroring build-release.sh's --show-bin-path.
+LC=$(echo "$CONFIG" | tr '[:upper:]' '[:lower:]')
+LINK=$(readlink ".build/$LC" 2>/dev/null || true)
+BUILD_ROOT=".build/out"
+if [ -n "$LINK" ]; then
+  case "$LINK" in
+    /*) BUILD_ROOT="${LINK%/Products/*}" ;;
+    *)  BUILD_ROOT=".build/${LINK%/Products/*}" ;;
+  esac
+fi
+INT_BASE="$BUILD_ROOT/Intermediates.noindex/GIFGallery.build/$CONFIG/GIFGallery-p.build/Objects-normal"
 if [ ! -d "$INT_BASE" ]; then
   echo "warning: $INT_BASE not found; skipping App Intents metadata (Shortcuts" >&2
   echo "warning: actions won't appear). Newer toolchains emit it automatically." >&2
