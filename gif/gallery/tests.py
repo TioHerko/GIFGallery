@@ -205,6 +205,18 @@ class UserIsolationTests(TestCase):
         self.assertEqual(len(gifs), 1)
         self.assertEqual(gifs[0]["title"], "bob")
 
+    def test_api_filters_by_tag_name(self):
+        from .models import Tag
+        tag = Tag.objects.create(name="Funny Cats", slug="funny-cats")
+        self.alice_gif.tags.add(tag)
+        _, token = APIToken.create_token(self.alice)
+        client = Client(headers={"Authorization": f"Bearer {token}"})
+        # Shortcuts passes tag names, not slugs
+        response = client.get("/api/gifs/?tag=Funny Cats")
+        self.assertEqual(len(response.json()["gifs"]), 1)
+        response = client.get("/api/gifs/?tag=funny-cats")
+        self.assertEqual(len(response.json()["gifs"]), 1)
+
     def test_cannot_tag_other_users_gif(self):
         client = Client()
         client.force_login(self.alice)
