@@ -19,7 +19,13 @@ public struct SettingsView: View {
                     .textContentType(.URL)
                 SecureField("API Token", text: $bearerToken, prompt: Text("Paste your API token"))
                     .onChange(of: bearerToken) { _, newValue in
-                        KeychainStore.saveToken(newValue)
+                        // Surface keychain failures; a silent failure here
+                        // looks like the app "forgetting" the token.
+                        if !KeychainStore.saveToken(newValue) {
+                            testStatus = "Could not save token to the keychain"
+                        } else if testStatus?.starts(with: "Could not save") == true {
+                            testStatus = nil
+                        }
                     }
             }
 
