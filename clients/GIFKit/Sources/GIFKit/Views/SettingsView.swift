@@ -15,7 +15,7 @@ public struct SettingsView: View {
             Section("Server") {
                 TextField("URL", text: $serverURL, prompt: Text("https://gif.example.com"))
                     .textContentType(.URL)
-                SecureField("Bearer Token", text: $bearerToken, prompt: Text("Paste your API token"))
+                SecureField("API Token", text: $bearerToken, prompt: Text("Paste your API token"))
                     .onChange(of: bearerToken) { _, newValue in
                         KeychainStore.saveToken(newValue)
                     }
