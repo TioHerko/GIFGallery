@@ -5,9 +5,9 @@
     <key>CFBundleIdentifier</key>
     <string>me.herko.gif.gallery</string>
     <key>CFBundleName</key>
-    <string>GIF Gallery</string>
+    <string>GIF Lobster</string>
     <key>CFBundleDisplayName</key>
-    <string>GIF Gallery</string>
+    <string>GIF Lobster</string>
     <key>CFBundleExecutable</key>
     <string>GIFGallery</string>
     <key>CFBundlePackageType</key>
