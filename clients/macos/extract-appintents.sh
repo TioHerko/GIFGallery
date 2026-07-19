@@ -32,29 +32,35 @@ if [ -z "$PRODUCTS" ]; then
   esac
 fi
 BUILD_ROOT="${PRODUCTS%/Products/*}"
-INT_BASE="$BUILD_ROOT/Intermediates.noindex/GIFGallery.build/$CONFIG/GIFGallery-p.build/Objects-normal"
-if [ ! -d "$INT_BASE" ]; then
-  echo "warning: $INT_BASE not found; skipping App Intents metadata (Shortcuts" >&2
-  echo "warning: actions won't appear). Newer toolchains emit it automatically." >&2
-  exit 0
-fi
+INT_ROOT="$BUILD_ROOT/Intermediates.noindex"
 
+# The per-arch intermediates dir also moves between toolchains (e.g.
+# GIFGallery.build/$CONFIG/GIFGallery-p.build/Objects-normal/<arch> on some,
+# a different target-dir name on others), so discover it instead: every
+# swift-build layout drops a GIFGallery.SwiftFileList next to the rest of
+# the per-arch products of the GIFGallery target.
 ARGS=()
-for ARCH_DIR in "$INT_BASE"/*/; do
+while IFS= read -r FILE_LIST; do
+  ARCH_DIR=$(dirname "$FILE_LIST")
   ARCH=$(basename "$ARCH_DIR")
-  [ -f "$ARCH_DIR/GIFGallery.SwiftFileList" ] || continue
+  case "$ARCH" in arm64|x86_64) ;; *) continue ;; esac
+  case "$ARCH_DIR" in */"$CONFIG"/*) ;; *) continue ;; esac
+  [ -f "$ARCH_DIR/GIFGallery_dependency_info.dat" ] || continue
   CONST_LIST="$ARCH_DIR/GIFGallery.SwiftConstValuesFileList"
   find "$ARCH_DIR" -name "*.swiftconstvalues" > "$CONST_LIST"
   ARGS+=(
     --target-triple "$ARCH-apple-macos$DEPLOYMENT_TARGET"
     --dependency-file "$ARCH_DIR/GIFGallery_dependency_info.dat"
-    --source-file-list "$ARCH_DIR/GIFGallery.SwiftFileList"
+    --source-file-list "$FILE_LIST"
     --swift-const-vals-list "$CONST_LIST"
   )
-done
+done < <(find "$INT_ROOT" -type f -name "GIFGallery.SwiftFileList" 2>/dev/null | sort)
 
 if [ ${#ARGS[@]} -eq 0 ]; then
-  echo "warning: no per-arch intermediates under $INT_BASE; skipping App Intents metadata." >&2
+  echo "warning: no GIFGallery.SwiftFileList found under $INT_ROOT for $CONFIG;" >&2
+  echo "warning: skipping App Intents metadata (Shortcuts actions won't appear)." >&2
+  echo "warning: intermediates present:" >&2
+  find "$INT_ROOT" -maxdepth 4 -type d 2>/dev/null | head -40 >&2
   exit 0
 fi
 
