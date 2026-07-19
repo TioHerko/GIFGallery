@@ -110,7 +110,7 @@ struct GalleryView: View {
                     }
                 }
             }
-            .navigationTitle("GIF Gallery")
+            .navigationTitle("GIF Lobster")
         }
         .task { await viewModel.fetchGIFs() }
         .sheet(isPresented: $showSettings) { SettingsView() }

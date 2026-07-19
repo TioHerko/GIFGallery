@@ -101,7 +101,7 @@ struct GalleryView: View {
                     }
                 }
             }
-            .navigationTitle("GIF Gallery")
+            .navigationTitle("GIF Lobster")
             .navigationBarTitleDisplayMode(.inline)
         }
         .task { await viewModel.fetchGIFs() }
