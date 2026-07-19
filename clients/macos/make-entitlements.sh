@@ -16,9 +16,11 @@ mkdir -p "$OUT"
 # this same string from the code signature's Team ID at runtime.
 GROUP="${TEAM_ID}.me.herko.gif.shared"
 
-# The app group doubles as the keychain access group (valid on macOS and
-# needs no restricted keychain-access-groups entitlement, which would demand
-# a provisioning profile).
+# The app group backs the shared UserDefaults suite only. It is NOT usable
+# as a keychain access group: without a provisioning profile, secd ignores
+# the application-groups entitlement for keychain purposes and grants no
+# access groups at all (the token lives in the login keychain instead — see
+# GIFKit's KeychainStore).
 cat > "$OUT/app.entitlements" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

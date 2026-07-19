@@ -6,10 +6,13 @@ import Security
 /// Configuration shared between the app and its share extension through an
 /// App Group.
 ///
-/// iOS uses a fixed "group." identifier baked into both targets' entitlements.
-/// macOS app groups must be prefixed with the Team ID, which is deliberately
-/// kept out of the repo — so it is recovered at runtime from the running
-/// code's own signature. Unsigned dev builds get nil and fall back to
+/// iOS uses a fixed "group." identifier baked into both targets' entitlements
+/// and doubles it as the keychain access group. macOS app groups must be
+/// prefixed with the Team ID, which is deliberately kept out of the repo —
+/// so it is recovered at runtime from the running code's own signature; the
+/// group backs only the shared UserDefaults suite (macOS keychain sharing
+/// via app groups needs a provisioning profile these builds don't have — see
+/// KeychainStore). Unsigned dev builds get nil and fall back to
 /// process-private storage (the share extension requires a signed build
 /// anyway, so nothing is lost).
 public enum SharedStore {
@@ -34,9 +37,19 @@ public enum SharedStore {
         KeychainStore.sharedAccessGroup = suiteName
         #elseif os(macOS)
         if let team = teamIdentifier() {
-            let group = "\(team).me.herko.gif.shared"
-            suiteName = group
-            KeychainStore.sharedAccessGroup = group
+            // The app group backs the shared UserDefaults suite ONLY. It must
+            // not be used as a keychain access group here: without a
+            // provisioning profile macOS grants these builds no keychain
+            // access groups at all, so every data-protection-keychain call
+            // fails with errSecMissingEntitlement and the token silently
+            // never persists. The token stays in the login keychain instead
+            // (see KeychainStore).
+            suiteName = "\(team).me.herko.gif.shared"
+        } else {
+            // Unsigned dev build: keychain ACLs are keyed to the ad-hoc
+            // signature, which changes every rebuild — keep a UserDefaults
+            // fallback for the token.
+            KeychainStore.mirrorsToDefaults = true
         }
         #endif
         migrateServerURL()

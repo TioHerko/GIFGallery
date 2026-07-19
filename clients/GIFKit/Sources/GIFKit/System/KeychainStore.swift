@@ -5,21 +5,38 @@ import Security
 /// plist on disk — readable by any process running as the user and included
 /// in unencrypted backups — so the token must not live there in production.
 ///
-/// Sharing with the share extension uses the app group as the keychain
-/// access group (the documented pattern that needs only the unrestricted
-/// application-groups entitlement — `keychain-access-groups` would require a
-/// provisioning profile on macOS). `SharedStore.configure()` sets
-/// `sharedAccessGroup`; when nil (unsigned macOS dev builds) tokens stay in
-/// the process-private keychain location and sharing is off. As a fallback
-/// for dev builds, the token is also mirrored to UserDefaults so it persists
-/// across launches even when keychain access is restricted by ad-hoc signing.
+/// iOS: the token lives in the data protection keychain under the app-group
+/// access group (set via `sharedAccessGroup`) so the share extension can
+/// read it; the provisioning profile authorizes the group.
+///
+/// macOS: the token lives in the login (file-based) keychain with NO access
+/// group. The data protection keychain is unusable in these builds: without
+/// a provisioning profile, secd grants the process no keychain access groups
+/// at all — the application-groups entitlement is NOT honored for keychain
+/// purposes (verified on macOS 26 with a Developer ID signature: every
+/// SecItem call with kSecUseDataProtectionKeychain fails with
+/// errSecMissingEntitlement/-34018, "Client has neither
+/// com.apple.application-identifier nor com.apple.security.application-groups
+/// nor keychain-access-groups entitlements"; sandboxed or not, timestamped
+/// or not). The share extension reads the same login-keychain item; the
+/// first read shows the system keychain prompt where the user can pick
+/// "Always Allow".
+///
+/// Unsigned/ad-hoc macOS dev builds additionally mirror the token to
+/// UserDefaults (`mirrorsToDefaults`) because login-keychain item ACLs are
+/// keyed to the binary's signature, which churns on every rebuild.
 public enum KeychainStore {
     private static let service = "GIFGallery"
     private static let account = "bearerToken"
 
-    /// The app group used as keychain access group. Written once by
+    /// iOS only: the app group used as keychain access group. Written once by
     /// SharedStore.configure() at startup, before any concurrent reads.
+    /// Never set on macOS — see the type comment.
     public nonisolated(unsafe) static var sharedAccessGroup: String?
+
+    /// Mirror the token to UserDefaults (unsigned macOS dev builds only).
+    /// Written once by SharedStore.configure() at startup.
+    public nonisolated(unsafe) static var mirrorsToDefaults = false
 
     /// Returns the stored token, migrating tokens left behind by older
     /// builds (UserDefaults, or the pre-sharing keychain location).
@@ -46,7 +63,10 @@ public enum KeychainStore {
         return nil
     }
 
-    public static func saveToken(_ token: String) {
+    /// Returns false when the token could not be written to the keychain
+    /// (so callers can surface the failure instead of losing it silently).
+    @discardableResult
+    public static func saveToken(_ token: String) -> Bool {
         if token.isEmpty {
             let sharedStatus = SecItemDelete(sharedQuery() as CFDictionary)
             if sharedStatus != errSecSuccess && sharedStatus != errSecItemNotFound {
@@ -57,13 +77,16 @@ public enum KeychainStore {
                 print("KeychainStore: SecItemDelete(legacy) failed with status \(legacyStatus)")
             }
             scrubLegacyDefaults()
+            return true
         } else {
-            save(token)
-            // On dev builds (no app group), also save to UserDefaults as a fallback
+            let saved = save(token)
+            // On unsigned dev builds, also save to UserDefaults as a fallback
             // since keychain can be flaky with ad-hoc signing.
-            if sharedAccessGroup == nil {
+            if mirrorsToDefaults {
                 UserDefaults.standard.set(token, forKey: "bearerToken")
+                return true
             }
+            return saved
         }
     }
 
@@ -71,10 +94,10 @@ public enum KeychainStore {
         UserDefaults.standard.removeObject(forKey: "bearerToken")
     }
 
-    /// Query targeting the shared access group when one is configured.
-    /// The data-protection-keychain flag matters on macOS, where the Sec*
-    /// APIs otherwise talk to the file-based login keychain, which doesn't
-    /// support access groups.
+    /// Query targeting the shared access group when one is configured (iOS).
+    /// With no group set this is identical to legacyQuery(): on macOS that
+    /// means the file-based login keychain — deliberately, since the
+    /// data protection keychain rejects these builds (see type comment).
     private static func sharedQuery() -> [String: Any] {
         var query = legacyQuery()
         if let group = sharedAccessGroup {
@@ -84,7 +107,7 @@ public enum KeychainStore {
         return query
     }
 
-    /// The pre-sharing item location: the login keychain on macOS, the
+    /// The default item location: the login keychain on macOS, the
     /// app-private access group on iOS.
     private static func legacyQuery() -> [String: Any] {
         [
@@ -114,7 +137,8 @@ public enum KeychainStore {
         return token
     }
 
-    private static func save(_ token: String) {
+    @discardableResult
+    private static func save(_ token: String) -> Bool {
         let data = Data(token.utf8)
         let update = [kSecValueData as String: data]
         let status = SecItemUpdate(sharedQuery() as CFDictionary, update as CFDictionary)
@@ -124,9 +148,12 @@ public enum KeychainStore {
             let addStatus = SecItemAdd(query as CFDictionary, nil)
             if addStatus != errSecSuccess {
                 print("KeychainStore: SecItemAdd failed with status \(addStatus)")
+                return false
             }
         } else if status != errSecSuccess {
             print("KeychainStore: SecItemUpdate failed with status \(status)")
+            return false
         }
+        return true
     }
 }
