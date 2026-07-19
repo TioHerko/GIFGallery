@@ -53,6 +53,11 @@ public final class GalleryViewModel {
             let query = searchQuery.isEmpty ? nil : searchQuery
             gifs = try await client!.listGIFs(tag: tag, query: query)
             rebuildTags()
+        } catch is CancellationError {
+            // SwiftUI cancels in-flight .task/.refreshable fetches on view
+            // updates; not a user-facing failure.
+        } catch let error as URLError where error.code == .cancelled {
+            // Same as above, surfaced through URLSession.
         } catch {
             errorMessage = error.localizedDescription
         }
