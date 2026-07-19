@@ -36,4 +36,4 @@ cp DockTilePlugin/Info.plist "$DOCKTILE/Contents/Info.plist"
 cp DockTilePlugin/DockIcon.png "$DOCKTILE/Contents/Resources/DockIcon.png"
 
 # Shortcuts discovery — must land inside the bundle before CI signs it.
-./extract-appintents.sh Release "$APP"
+./extract-appintents.sh Release "$APP" "$BIN"

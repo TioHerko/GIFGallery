@@ -8,27 +8,30 @@
 # backend the inputs don't exist; warn and skip — the app still works, it
 # just won't surface Shortcuts actions.
 #
-# Usage: extract-appintents.sh <Debug|Release> <app-bundle-path>
+# Usage: extract-appintents.sh <Debug|Release> <app-bundle-path> [products-dir]
 set -euo pipefail
 
-CONFIG="${1:?usage: extract-appintents.sh <Debug|Release> <app-bundle-path>}"
-APP="${2:?usage: extract-appintents.sh <Debug|Release> <app-bundle-path>}"
+CONFIG="${1:?usage: extract-appintents.sh <Debug|Release> <app-bundle-path> [products-dir]}"
+APP="${2:?usage: extract-appintents.sh <Debug|Release> <app-bundle-path> [products-dir]}"
+PRODUCTS="${3:-}"
 
 # Must match the platforms line in Package.swift.
 DEPLOYMENT_TARGET=15.0
 
-# The build root moves between toolchains (.build/out vs .build/apple);
-# derive it from the products symlink (e.g. release -> out/Products/Release)
-# instead of hardcoding, mirroring build-release.sh's --show-bin-path.
-LC=$(echo "$CONFIG" | tr '[:upper:]' '[:lower:]')
-LINK=$(readlink ".build/$LC" 2>/dev/null || true)
-BUILD_ROOT=".build/out"
-if [ -n "$LINK" ]; then
+# The build root moves between toolchains (.build/out vs .build/apple), so it
+# can't be hardcoded. Prefer the products dir the caller resolved via
+# `swift build --show-bin-path` (the .build/<config> symlink isn't created
+# for universal --arch builds, like CI's); fall back to that symlink.
+if [ -z "$PRODUCTS" ]; then
+  LC=$(echo "$CONFIG" | tr '[:upper:]' '[:lower:]')
+  LINK=$(readlink ".build/$LC" 2>/dev/null || true)
   case "$LINK" in
-    /*) BUILD_ROOT="${LINK%/Products/*}" ;;
-    *)  BUILD_ROOT=".build/${LINK%/Products/*}" ;;
+    "") PRODUCTS=".build/out/Products/$CONFIG" ;;
+    /*) PRODUCTS="$LINK" ;;
+    *)  PRODUCTS=".build/$LINK" ;;
   esac
 fi
+BUILD_ROOT="${PRODUCTS%/Products/*}"
 INT_BASE="$BUILD_ROOT/Intermediates.noindex/GIFGallery.build/$CONFIG/GIFGallery-p.build/Objects-normal"
 if [ ! -d "$INT_BASE" ]; then
   echo "warning: $INT_BASE not found; skipping App Intents metadata (Shortcuts" >&2
