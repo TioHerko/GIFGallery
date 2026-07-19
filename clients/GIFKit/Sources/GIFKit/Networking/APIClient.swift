@@ -95,6 +95,13 @@ public struct APIClient: Sendable {
     }
 
     public func upload(files: [URL], tags: String, titlePrefix: String) async throws -> [String] {
+        let payloads = try files.map {
+            SharePayload(filename: $0.lastPathComponent, data: try Data(contentsOf: $0))
+        }
+        return try await upload(payloads: payloads, tags: tags, titlePrefix: titlePrefix)
+    }
+
+    public func upload(payloads: [SharePayload], tags: String, titlePrefix: String) async throws -> [String] {
         let boundary = "Boundary-\(UUID().uuidString)"
         var req = request("upload/")
         req.httpMethod = "POST"
@@ -111,18 +118,17 @@ public struct APIClient: Sendable {
         if !tags.isEmpty { appendField("tags", tags) }
         if !titlePrefix.isEmpty { appendField("title_prefix", titlePrefix) }
 
-        for fileURL in files {
-            let fileData = try Data(contentsOf: fileURL)
+        for payload in payloads {
             // Filenames come from user-chosen files; quotes and CR/LF would
             // corrupt or inject multipart headers.
-            let filename = fileURL.lastPathComponent
+            let filename = payload.filename
                 .replacingOccurrences(of: "\r", with: "")
                 .replacingOccurrences(of: "\n", with: "")
                 .replacingOccurrences(of: "\"", with: "'")
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"files\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
             body.append("Content-Type: image/gif\r\n\r\n".data(using: .utf8)!)
-            body.append(fileData)
+            body.append(payload.data)
             body.append("\r\n".data(using: .utf8)!)
         }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)

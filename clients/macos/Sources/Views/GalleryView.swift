@@ -6,6 +6,7 @@ struct GalleryView: View {
     @Bindable var viewModel: GalleryViewModel
     @AppStorage("gridSize") private var gridSizeRaw = GridSize.medium.rawValue
     @State private var showSettings = false
+    @State private var stagedPayloads: [SharePayload] = []
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
 
@@ -69,7 +70,7 @@ struct GalleryView: View {
                         .padding()
                     }
                 }
-                .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+                .onDrop(of: [.gif, .fileURL, .url], isTargeted: nil) { providers in
                     handleDrop(providers)
                     return true
                 }
@@ -115,7 +116,16 @@ struct GalleryView: View {
         .task { await viewModel.fetchGIFs() }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $viewModel.showingUpload) {
-            UploadSheet(viewModel: viewModel)
+            UploadSheet(viewModel: viewModel, payloads: $stagedPayloads)
+        }
+        // Finder "Open With" (CFBundleDocumentTypes routes GIFs here).
+        .onOpenURL { url in
+            do {
+                stagedPayloads.append(try GIFIngest.ingest(fileURL: url))
+                viewModel.showingUpload = true
+            } catch {
+                flash(error.localizedDescription)
+            }
         }
         .sheet(item: $viewModel.editingTagsGIF) { gif in
             TagEditorSheet(gif: gif, viewModel: viewModel)
@@ -187,31 +197,25 @@ struct GalleryView: View {
         }
     }
 
+    /// Stages dropped GIFs — files, raw image data, or URLs pointing at
+    /// GIFs — and opens the upload sheet so they can be tagged.
     private func handleDrop(_ providers: [NSItemProvider]) {
         Task {
-            var urls: [URL] = []
+            var payloads: [SharePayload] = []
+            var firstError: String?
             for provider in providers {
-                guard let url = await loadFileURL(from: provider),
-                      url.pathExtension.lowercased() == "gif"
-                else { continue }
-                urls.append(url)
-            }
-            guard !urls.isEmpty else { return }
-            await viewModel.upload(files: urls, tags: "", titlePrefix: "")
-        }
-    }
-
-    private func loadFileURL(from provider: NSItemProvider) async -> URL? {
-        await withCheckedContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
-                guard let data = data as? Data,
-                      let url = URL(dataRepresentation: data, relativeTo: nil)
-                else {
-                    continuation.resume(returning: nil)
-                    return
+                do {
+                    payloads.append(try await GIFIngest.load(from: provider))
+                } catch {
+                    if firstError == nil { firstError = error.localizedDescription }
                 }
-                continuation.resume(returning: url)
             }
+            if payloads.isEmpty {
+                flash(firstError ?? "Nothing dropped was a GIF.")
+                return
+            }
+            stagedPayloads.append(contentsOf: payloads)
+            viewModel.showingUpload = true
         }
     }
 }

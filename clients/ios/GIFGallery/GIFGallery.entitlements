@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Shared with ShareExtension/ShareExtension.entitlements. The group
+         carries the server URL (UserDefaults suite) and doubles as the
+         keychain access group for the API token — app groups are valid
+         keychain groups and need no extra entitlement. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.me.herko.GIFGallery</string>
+    </array>
+</dict>
+</plist>

@@ -55,8 +55,19 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: ./clients/macos
         run: |
-          codesign --force --deep --options runtime --timestamp \
-            --entitlements GIFGallery.entitlements \
+          # The Team ID never lives in the repo; recover it from the signing
+          # identity name, e.g. "Developer ID Application: Name (TEAMID)".
+          TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -E 's/.*\(([A-Z0-9]+)\)$/\1/')
+          chmod +x make-entitlements.sh
+          ./make-entitlements.sh "$TEAM_ID" build/entitlements
+          # Sign inside-out. The share extension gets its own (sandboxed)
+          # entitlements first — `--deep` would clobber them with the app's.
+          codesign --force --options runtime --timestamp \
+            --entitlements build/entitlements/appex.entitlements \
+            --sign "$SIGN_IDENTITY" \
+            "build/GIF Lobster.app/Contents/PlugIns/GIF Lobster Share.appex"
+          codesign --force --options runtime --timestamp \
+            --entitlements build/entitlements/app.entitlements \
             --sign "$SIGN_IDENTITY" "build/GIF Lobster.app"
           codesign --verify --strict --verbose=2 "build/GIF Lobster.app"
 
