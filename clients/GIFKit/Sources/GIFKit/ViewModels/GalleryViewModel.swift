@@ -32,12 +32,7 @@ public final class GalleryViewModel {
     public init() {}
 
     private var client: APIClient? {
-        guard let urlString = UserDefaults.standard.string(forKey: "serverURL"),
-              !urlString.isEmpty,
-              let url = APIClient.validateBaseURL(urlString),
-              let token = KeychainStore.loadToken()
-        else { return nil }
-        return APIClient(baseURL: url, token: token)
+        SharedStore.makeClient()
     }
 
     public var isConfigured: Bool {
@@ -184,6 +179,16 @@ public final class GalleryViewModel {
         guard let client else { return }
         do {
             _ = try await client.upload(files: files, tags: tags, titlePrefix: titlePrefix)
+            await fetchGIFs()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func upload(payloads: [SharePayload], tags: String, titlePrefix: String) async {
+        guard let client else { return }
+        do {
+            _ = try await client.upload(payloads: payloads, tags: tags, titlePrefix: titlePrefix)
             await fetchGIFs()
         } catch {
             errorMessage = error.localizedDescription

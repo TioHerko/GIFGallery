@@ -1,7 +1,9 @@
 import SwiftUI
 
 public struct SettingsView: View {
-    @AppStorage("serverURL") private var serverURL = ""
+    // The server URL lives in the app-group suite so the share extension can
+    // read it; SharedStore falls back to .standard when no group exists.
+    @AppStorage("serverURL", store: SharedStore.defaults) private var serverURL = ""
     @AppStorage("gridSize") private var gridSizeRaw = GridSize.medium.rawValue
     @State private var bearerToken = KeychainStore.loadToken() ?? ""
     @State private var testStatus: String?

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>me.herko.gif.gallery.share</string>
+    <key>CFBundleName</key>
+    <string>GIF Lobster</string>
+    <key>CFBundleDisplayName</key>
+    <string>GIF Lobster</string>
+    <key>CFBundleExecutable</key>
+    <string>ShareExtension</string>
+    <key>CFBundlePackageType</key>
+    <string>XPC!</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>15.0</string>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionAttributes</key>
+        <dict>
+            <!-- Show for GIF attachments and URLs. Non-GIF files still match
+                 via public.url (file URLs conform to it); GIFIngest validates
+                 the actual bytes and explains when something isn't a GIF. -->
+            <key>NSExtensionActivationRule</key>
+            <string>SUBQUERY(extensionItems, $extensionItem, SUBQUERY($extensionItem.attachments, $attachment, ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.compuserve.gif" OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url").@count &gt; 0).@count &gt; 0</string>
+        </dict>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.share-services</string>
+        <key>NSExtensionPrincipalClass</key>
+        <string>ShareViewController</string>
+    </dict>
+</dict>
+</plist>

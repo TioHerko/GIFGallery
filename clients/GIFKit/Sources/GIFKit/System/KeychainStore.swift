@@ -1,19 +1,38 @@
 import Foundation
 import Security
 
-/// Stores the API bearer token in the login keychain. UserDefaults is a
-/// plaintext plist on disk — readable by any process running as the user and
-/// included in unencrypted backups — so the token must not live there.
+/// Stores the API bearer token in the keychain. UserDefaults is a plaintext
+/// plist on disk — readable by any process running as the user and included
+/// in unencrypted backups — so the token must not live there.
+///
+/// Sharing with the share extension uses the app group as the keychain
+/// access group (the documented pattern that needs only the unrestricted
+/// application-groups entitlement — `keychain-access-groups` would require a
+/// provisioning profile on macOS). `SharedStore.configure()` sets
+/// `sharedAccessGroup`; when nil (unsigned macOS dev builds) tokens stay in
+/// the process-private location and sharing is off.
 public enum KeychainStore {
     private static let service = "GIFGallery"
     private static let account = "bearerToken"
 
-    /// Returns the stored token, migrating any token left behind in
-    /// UserDefaults by older builds into the keychain (and scrubbing it).
+    /// The app group used as keychain access group. Written once by
+    /// SharedStore.configure() at startup, before any concurrent reads.
+    public nonisolated(unsafe) static var sharedAccessGroup: String?
+
+    /// Returns the stored token, migrating tokens left behind by older
+    /// builds (UserDefaults, or the pre-sharing keychain location).
     public static func loadToken() -> String? {
-        if let token = read() {
+        if let token = read(query: sharedQuery()) {
             scrubLegacyDefaults()
             return token
+        }
+        if sharedAccessGroup != nil, let legacy = read(query: legacyQuery()) {
+            // Order matters: on iOS the legacy delete (no access-group
+            // filter) matches items in every accessible group, so it must
+            // run before the shared item is written.
+            SecItemDelete(legacyQuery() as CFDictionary)
+            save(legacy)
+            return legacy
         }
         if let legacy = UserDefaults.standard.string(forKey: "bearerToken"),
            !legacy.isEmpty {
@@ -26,7 +45,8 @@ public enum KeychainStore {
 
     public static func saveToken(_ token: String) {
         if token.isEmpty {
-            SecItemDelete(baseQuery() as CFDictionary)
+            SecItemDelete(sharedQuery() as CFDictionary)
+            SecItemDelete(legacyQuery() as CFDictionary)
         } else {
             save(token)
         }
@@ -36,7 +56,22 @@ public enum KeychainStore {
         UserDefaults.standard.removeObject(forKey: "bearerToken")
     }
 
-    private static func baseQuery() -> [String: Any] {
+    /// Query targeting the shared access group when one is configured.
+    /// The data-protection-keychain flag matters on macOS, where the Sec*
+    /// APIs otherwise talk to the file-based login keychain, which doesn't
+    /// support access groups.
+    private static func sharedQuery() -> [String: Any] {
+        var query = legacyQuery()
+        if let group = sharedAccessGroup {
+            query[kSecAttrAccessGroup as String] = group
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+        return query
+    }
+
+    /// The pre-sharing item location: the login keychain on macOS, the
+    /// app-private access group on iOS.
+    private static func legacyQuery() -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -44,8 +79,8 @@ public enum KeychainStore {
         ]
     }
 
-    private static func read() -> String? {
-        var query = baseQuery()
+    private static func read(query base: [String: Any]) -> String? {
+        var query = base
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
@@ -60,9 +95,9 @@ public enum KeychainStore {
     private static func save(_ token: String) {
         let data = Data(token.utf8)
         let update = [kSecValueData as String: data]
-        let status = SecItemUpdate(baseQuery() as CFDictionary, update as CFDictionary)
+        let status = SecItemUpdate(sharedQuery() as CFDictionary, update as CFDictionary)
         if status == errSecItemNotFound {
-            var query = baseQuery()
+            var query = sharedQuery()
             query[kSecValueData as String] = data
             SecItemAdd(query as CFDictionary, nil)
         }

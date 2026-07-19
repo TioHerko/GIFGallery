@@ -4,11 +4,14 @@ import UniformTypeIdentifiers
 
 struct UploadSheet: View {
     @Bindable var viewModel: GalleryViewModel
+    // Staged by drag & drop / Open With before the sheet appears; the file
+    // picker appends to it.
+    @Binding var payloads: [SharePayload]
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedFiles: [URL] = []
     @State private var tags = ""
     @State private var titlePrefix = ""
     @State private var isUploading = false
+    @State private var pickerError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -17,16 +20,16 @@ struct UploadSheet: View {
 
             HStack {
                 Button("Choose Files...") { pickFiles() }
-                Text(selectedFiles.isEmpty ? "No files selected" : "\(selectedFiles.count) file(s)")
+                Text(payloads.isEmpty ? "No files selected" : "\(payloads.count) file(s)")
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }
 
-            if !selectedFiles.isEmpty {
+            if !payloads.isEmpty {
                 ScrollView(.horizontal) {
                     HStack(spacing: 4) {
-                        ForEach(selectedFiles, id: \.absoluteString) { url in
-                            Text(url.lastPathComponent)
+                        ForEach(payloads) { payload in
+                            Text(payload.filename)
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -36,16 +39,22 @@ struct UploadSheet: View {
                 }
             }
 
+            if let pickerError {
+                Text(pickerError)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
             TextField("Tags (comma-separated)", text: $tags)
             TextField("Title prefix (optional)", text: $titlePrefix)
 
             HStack {
                 Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
+                Button("Cancel", role: .cancel) { close() }
                     .keyboardShortcut(.cancelAction)
                 Button("Upload") { doUpload() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(selectedFiles.isEmpty || isUploading)
+                    .disabled(payloads.isEmpty || isUploading)
             }
 
             if isUploading {
@@ -59,19 +68,30 @@ struct UploadSheet: View {
     private func pickFiles() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [UTType.gif, UTType.image]
+        panel.allowedContentTypes = [UTType.gif]
         panel.canChooseDirectories = false
-        if panel.runModal() == .OK {
-            selectedFiles = panel.urls
+        guard panel.runModal() == .OK else { return }
+        pickerError = nil
+        for url in panel.urls {
+            do {
+                payloads.append(try GIFIngest.ingest(fileURL: url))
+            } catch {
+                pickerError = error.localizedDescription
+            }
         }
+    }
+
+    private func close() {
+        payloads = []
+        dismiss()
     }
 
     private func doUpload() {
         isUploading = true
         Task {
-            await viewModel.upload(files: selectedFiles, tags: tags, titlePrefix: titlePrefix)
+            await viewModel.upload(payloads: payloads, tags: tags, titlePrefix: titlePrefix)
             isUploading = false
-            dismiss()
+            close()
         }
     }
 }
