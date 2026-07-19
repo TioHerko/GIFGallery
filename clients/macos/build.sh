@@ -31,7 +31,7 @@ cp DockTilePlugin/Info.plist "$DOCKTILE/Contents/Info.plist"
 cp DockTilePlugin/DockIcon.png "$DOCKTILE/Contents/Resources/DockIcon.png"
 
 # Shortcuts discovery — must land inside the bundle before signing.
-./extract-appintents.sh Debug "$APP" "$(swift build --show-bin-path)"
+./extract-appintents.sh Debug "$APP"
 
 # The share extension only registers (and can only reach the shared app-group
 # credentials) in a signed build. With a Team ID available, development-sign
@@ -40,6 +40,14 @@ cp DockTilePlugin/DockIcon.png "$DOCKTILE/Contents/Resources/DockIcon.png"
 [ -f signing.local.sh ] && source ./signing.local.sh
 TEAM_ID="${DEVELOPMENT_TEAM:-}"
 IDENTITY="${SIGNING_IDENTITY:-}"
+
+# Embed the Team ID into the app bundle so SharedStore uses a stable
+# app group identifier regardless of how the app is signed (ad-hoc vs
+# Developer ID). The TEAM_ID comes from signing.local.sh or the env.
+if [ -n "$TEAM_ID" ]; then
+  /usr/libexec/PlistBuddy -c "Add :TeamID string $TEAM_ID" "$APP/Contents/Info.plist"
+fi
+
 if [ -n "$TEAM_ID" ] && [ -z "$IDENTITY" ]; then
   # Prefer Developer ID: an "Apple Development" signature only runs with an
   # embedded provisioning profile (Gatekeeper blocks it as "malware" without
