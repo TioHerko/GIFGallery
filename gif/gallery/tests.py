@@ -90,6 +90,63 @@ class UploadValidationTests(TestCase):
 
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA)
+class OwnerBackfillMigrationTests(TestCase):
+    """Migration 0007 hands pre-multi-user (ownerless) GIFs to the original
+    admin instead of leaving them invisible to every account."""
+
+    def _backfill(self):
+        from importlib import import_module
+
+        from django.apps import apps
+
+        migration = import_module(
+            "gallery.migrations.0007_assign_orphan_gifs_to_admin"
+        )
+        migration.assign_orphan_gifs(apps, None)
+
+    def test_orphans_go_to_earliest_superuser(self):
+        admin = User.objects.create_user(
+            "admin", password="pw", is_superuser=True, is_staff=True
+        )
+        later_admin = User.objects.create_user(
+            "admin2", password="pw", is_superuser=True, is_staff=True
+        )
+        regular = User.objects.create_user("regular", password="pw")
+        orphan = Gif.objects.create(
+            title="old", file=SimpleUploadedFile("o.gif", TINY_GIF)
+        )
+        owned = Gif.objects.create(
+            title="mine", owner=regular,
+            file=SimpleUploadedFile("m.gif", TINY_GIF),
+        )
+
+        self._backfill()
+
+        orphan.refresh_from_db()
+        owned.refresh_from_db()
+        self.assertEqual(orphan.owner, admin)
+        self.assertNotEqual(orphan.owner, later_admin)
+        self.assertEqual(owned.owner, regular)
+
+    def test_falls_back_to_earliest_user_without_superuser(self):
+        first = User.objects.create_user("first", password="pw")
+        User.objects.create_user("second", password="pw")
+        orphan = Gif.objects.create(
+            title="old", file=SimpleUploadedFile("o.gif", TINY_GIF)
+        )
+
+        self._backfill()
+
+        orphan.refresh_from_db()
+        self.assertEqual(orphan.owner, first)
+
+    def test_noop_on_empty_user_table(self):
+        Gif.objects.create(title="old", file=SimpleUploadedFile("o.gif", TINY_GIF))
+        self._backfill()
+        self.assertIsNone(Gif.objects.first().owner)
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA)
 class UserIsolationTests(TestCase):
     """Each user should only see and manage their own GIFs."""
 
