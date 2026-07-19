@@ -108,8 +108,14 @@ public struct GIFGridItem: View {
                 .help("Copy embed link")
 
                 Button { onSendToDiscord() } label: {
-                    Image(systemName: "paperplane.fill")
+                    #if os(macOS)
+                    DiscordMark()
+                        .fill(style: FillStyle(eoFill: true))
+                        .frame(width: 14, height: 12)
+                    #else
+                    Image(systemName: "square.and.arrow.up")
                         .font(.caption)
+                    #endif
                 }
                 .buttonStyle(.borderless)
                 .help(sendLabel)
