@@ -369,7 +369,9 @@ async def api_list_gifs(request):
     gifs = Gif.objects.prefetch_related("tags").filter(owner=request.user)
 
     if tag_slug:
-        gifs = gifs.filter(tags__slug=tag_slug)
+        gifs = gifs.filter(
+            models.Q(tags__slug=tag_slug) | models.Q(tags__name__iexact=tag_slug)
+        )
 
     if query:
         gifs = gifs.filter(
