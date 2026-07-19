@@ -57,8 +57,8 @@ jobs:
         run: |
           codesign --force --deep --options runtime --timestamp \
             --entitlements GIFGallery.entitlements \
-            --sign "$SIGN_IDENTITY" build/GIFGallery.app
-          codesign --verify --strict --verbose=2 build/GIFGallery.app
+            --sign "$SIGN_IDENTITY" "build/GIF Lobster.app"
+          codesign --verify --strict --verbose=2 "build/GIF Lobster.app"
 
       - name: Decode notary API key
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -74,21 +74,21 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
-          ditto -c -k --keepParent build/GIFGallery.app "$RUNNER_TEMP/GIFGallery.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/GIFGallery.zip" \
+          ditto -c -k --keepParent "build/GIF Lobster.app" "$RUNNER_TEMP/GIF Lobster.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/GIF Lobster.zip" \
             --key "$RUNNER_TEMP/api_key.p8" \
             --key-id "$APPLE_API_KEY_ID" \
             --issuer "$APPLE_API_ISSUER_ID" \
             --wait
           # Staple the ticket into the .app so Gatekeeper validates it offline.
-          xcrun stapler staple build/GIFGallery.app
+          xcrun stapler staple "build/GIF Lobster.app"
 
       - name: Package release
         id: create-dmg
         uses: L-Super/create-dmg-actions@v1
         with:
-          dmg_name: GIFGalleryClient
-          src_dir: ./clients/macos/build/GIFGallery.app
+          dmg_name: "GIF Lobster"
+          src_dir: "./clients/macos/build/GIF Lobster.app"
           background: ./clients/macos/bg.svg
 
       - name: Sign, notarize and staple DMG
@@ -100,7 +100,7 @@ jobs:
           # create-dmg-actions@v1 writes "<dmg_name>.dmg" into the workspace
           # root and exposes it as the `dmg_name` output (not `dmg_path`), so
           # reference the fixed path directly.
-          DMG="$GITHUB_WORKSPACE/GIFGalleryClient.dmg"
+          DMG="$GITHUB_WORKSPACE/GIF Lobster.dmg"
           codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
           xcrun notarytool submit "$DMG" \
             --key "$RUNNER_TEMP/api_key.p8" \
@@ -114,8 +114,8 @@ jobs:
       - name: "Upload macOS Build Artifact"
         uses: actions/upload-artifact@v7
         with:
-          name: GIFGallery
-          path: ${{ github.workspace }}/GIFGalleryClient.dmg
+          name: GIF Lobster
+          path: ${{ github.workspace }}/GIF Lobster.dmg
           archive: false
       - name: Create a draft release
         # Only publish releases for pushes to main, not for pull requests.
@@ -128,7 +128,7 @@ jobs:
           name: Release build-${{ github.run_number }}
           draft: true
           prerelease: false
-          files: ${{ github.workspace }}/GIFGalleryClient.dmg
+          files: ${{ github.workspace }}/GIF Lobster.dmg
           body: |
-            Built artifacts for GIF Gallery (the macOS application).
+            Built artifacts for GIF Lobster (the macOS application).
             Signed with Developer ID and notarized by Apple.
