@@ -64,6 +64,7 @@ def auth_required(view):
         # Session auth (resolve lazy user object asynchronously)
         user = await request.auser()
         if user.is_authenticated:
+            request.user = user
             return await view(request, *args, **kwargs)
 
         return JsonResponse({"error": "Authentication required"}, status=401)

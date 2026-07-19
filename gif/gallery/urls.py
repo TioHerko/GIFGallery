@@ -17,6 +17,7 @@ urlpatterns = [
     path("settings/", views.settings_view, name="settings"),
     path("settings/password/", views.change_password_view, name="change_password"),
     path("settings/tokens/create/", views.create_token_view, name="create_token"),
+    path("settings/users/create/", views.create_user_view, name="create_user"),
     path(
         "settings/tokens/<int:token_id>/delete/",
         views.delete_token_view,

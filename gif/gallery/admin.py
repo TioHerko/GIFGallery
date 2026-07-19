@@ -11,9 +11,9 @@ class TagAdmin(admin.ModelAdmin):
 
 @admin.register(Gif)
 class GifAdmin(admin.ModelAdmin):
-    list_display = ("title", "created_at", "tag_list")
-    list_filter = ("tags",)
-    search_fields = ("title",)
+    list_display = ("title", "owner", "created_at", "tag_list")
+    list_filter = ("tags", "owner")
+    search_fields = ("title", "owner__username")
     filter_horizontal = ("tags",)
 
     def tag_list(self, obj):

@@ -53,10 +53,10 @@ class FirstRunLoginView(LoginView):
 
 
 def setup_view(request):
-    """One-time first-run page: create the (single) account, then log in.
+    """First-run page: create the admin account, then log in.
 
     Only reachable while the user table is empty; afterwards it permanently
-    redirects to the login page, so it can never be used to add accounts.
+    redirects to the login page. The first user is always the admin.
     """
     User = get_user_model()
     if User.objects.exists():
@@ -65,12 +65,9 @@ def setup_view(request):
     form = UserCreationForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            # Re-check inside the transaction so two concurrent submissions
-            # can't both create an account.
             if User.objects.exists():
                 return redirect("login")
             user = form.save(commit=False)
-            # Same powers createsuperuser would grant, including /admin/.
             user.is_staff = True
             user.is_superuser = True
             user.save()
@@ -83,7 +80,7 @@ def setup_view(request):
 TOKEN_DESCRIPTION_MAX = APIToken._meta.get_field("name").max_length
 
 
-def _render_settings(request, password_form=None):
+def _render_settings(request, password_form=None, create_user_form=None):
     # Raw tokens are only stored hashed, so a freshly created one is stashed
     # in the session by create_token_view and shown exactly once here.
     new_token = request.session.pop("new_api_token", None)
@@ -94,6 +91,9 @@ def _render_settings(request, password_form=None):
             "password_form": password_form or PasswordChangeForm(request.user),
             "tokens": request.user.api_tokens.order_by("-created_at"),
             "new_token": new_token,
+            "create_user_form": create_user_form or UserCreationForm(),
+            "is_admin": request.user.is_superuser,
+            "users": get_user_model().objects.order_by("-date_joined"),
         },
     )
 
@@ -140,6 +140,21 @@ def create_token_view(request):
 
 @login_required
 @require_POST
+def create_user_view(request):
+    if not request.user.is_superuser:
+        messages.error(request, "Only the admin can create accounts.")
+        return redirect("gallery:settings")
+
+    form = UserCreationForm(request.POST)
+    if form.is_valid():
+        user = form.save()
+        messages.success(request, f"User “{user.username}” created.")
+        return redirect("gallery:settings")
+    return _render_settings(request, create_user_form=form)
+
+
+@login_required
+@require_POST
 def delete_token_view(request, token_id):
     token = get_object_or_404(APIToken, id=token_id, user=request.user)
     token.delete()
@@ -149,9 +164,10 @@ def delete_token_view(request, token_id):
 
 @login_required
 async def gallery_view(request):
+    user = await request.auser()
     tag_slug = request.GET.get("tag")
     query = request.GET.get("q", "").strip()
-    gifs = Gif.objects.prefetch_related("tags").all()
+    gifs = Gif.objects.prefetch_related("tags").filter(owner=user)
     active_tag = None
 
     if tag_slug:
@@ -238,7 +254,7 @@ async def embed_gif(request, gif_id):
 async def tag_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
-    gif = await aget_object_or_404(Gif, id=gif_id)
+    gif = await aget_object_or_404(Gif, id=gif_id, owner=request.user)
     tag_names = request.POST.get("tags", "")
     tags = []
     for name in tag_names.split(","):
@@ -259,7 +275,7 @@ async def tag_gif_view(request, gif_id):
 async def rename_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
-    gif = await aget_object_or_404(Gif, id=gif_id)
+    gif = await aget_object_or_404(Gif, id=gif_id, owner=request.user)
     title = request.POST.get("title", "").strip()
     if not title:
         return JsonResponse({"error": "Title is required"}, status=400)
@@ -272,7 +288,7 @@ async def rename_gif_view(request, gif_id):
 async def delete_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
-    gif = await aget_object_or_404(Gif, id=gif_id)
+    gif = await aget_object_or_404(Gif, id=gif_id, owner=request.user)
     gif.file.delete(save=False)
     if gif.thumbnail:
         gif.thumbnail.delete(save=False)
@@ -284,7 +300,7 @@ async def delete_gif_view(request, gif_id):
 async def copy_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
-    gif = await aget_object_or_404(Gif, id=gif_id)
+    gif = await aget_object_or_404(Gif, id=gif_id, owner=request.user)
     gif.copy_count = F("copy_count") + 1
     await gif.asave(update_fields=["copy_count"])
     await gif.arefresh_from_db(fields=["copy_count"])
@@ -322,7 +338,7 @@ async def upload_view(request):
             # Strip file extension from title
             if "." in title:
                 title = title.rsplit(".", 1)[0]
-            gif = await Gif.objects.acreate(title=title, file=f)
+            gif = await Gif.objects.acreate(title=title, file=f, owner=request.user)
             await gif.tags.aset(tags)
             # Pillow work runs on a free thread, but the DB write must go
             # through the request's connection (thread_sensitive default):
@@ -350,7 +366,7 @@ async def upload_view(request):
 async def api_list_gifs(request):
     tag_slug = request.GET.get("tag")
     query = request.GET.get("q", "").strip()
-    gifs = Gif.objects.prefetch_related("tags").all()
+    gifs = Gif.objects.prefetch_related("tags").filter(owner=request.user)
 
     if tag_slug:
         gifs = gifs.filter(tags__slug=tag_slug)
