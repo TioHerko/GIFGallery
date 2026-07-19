@@ -22,6 +22,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# Xcode's IPA-packaging step runs /usr/bin/rsync (openrsync), which spawns its
+# local "server" side via `rsync` from PATH. If Homebrew's rsync resolves
+# first, the two implementations disagree on flags and the export dies with
+# "Copy failed". Pin Apple's tools ahead of everything else.
+export PATH="/usr/bin:$PATH"
+
 # Optional: a git-ignored file next to this script that exports DEVELOPMENT_TEAM.
 [ -f signing.local.sh ] && source ./signing.local.sh
 
