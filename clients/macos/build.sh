@@ -23,6 +23,13 @@ mkdir -p "$APPEX/Contents/MacOS"
 cp .build/debug/ShareExtension "$APPEX/Contents/MacOS/ShareExtension"
 cp ShareExtension/Info.plist "$APPEX/Contents/Info.plist"
 
+# Dock tile plug-in: draws the raw icon so the Dock can't squircle it.
+DOCKTILE="$APP/Contents/PlugIns/GIF Lobster Dock.docktileplugin"
+mkdir -p "$DOCKTILE/Contents/MacOS" "$DOCKTILE/Contents/Resources"
+cp .build/debug/libDockTilePlugin.dylib "$DOCKTILE/Contents/MacOS/DockTilePlugin"
+cp DockTilePlugin/Info.plist "$DOCKTILE/Contents/Info.plist"
+cp DockTilePlugin/DockIcon.png "$DOCKTILE/Contents/Resources/DockIcon.png"
+
 # Shortcuts discovery — must land inside the bundle before signing.
 ./extract-appintents.sh Debug "$APP"
 
@@ -58,6 +65,7 @@ fi
 
 if [ -n "$IDENTITY" ]; then
   ./make-entitlements.sh "$TEAM_ID" build/entitlements
+  codesign --force --sign "$IDENTITY" "$DOCKTILE"
   codesign --force --sign "$IDENTITY" \
     --entitlements build/entitlements/appex.entitlements "$APPEX"
   codesign --force --sign "$IDENTITY" \
@@ -78,6 +86,7 @@ else
 </dict>
 </plist>
 PLIST
+  codesign --force --sign - "$DOCKTILE"
   codesign --force --sign - \
     --entitlements build/adhoc-appex.entitlements "$APPEX"
   codesign --force --sign - "$APP"
