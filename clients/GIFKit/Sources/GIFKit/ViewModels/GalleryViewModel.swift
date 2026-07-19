@@ -124,8 +124,8 @@ public final class GalleryViewModel {
         Task { try? await client?.trackCopy(id: gif.id) }
     }
 
+    #if os(macOS)
     public func sendToDiscord(_ gif: GIFItem) async -> Bool {
-        #if os(macOS)
         do {
             try await DiscordPaste.send(gif.url)
             Task { try? await client?.trackCopy(id: gif.id) }
@@ -134,21 +134,13 @@ public final class GalleryViewModel {
             errorMessage = error.localizedDescription
             return false
         }
-        #elseif canImport(UIKit)
-        // No synthetic keystrokes on iOS: copy the URL, then hand off to the
-        // Discord app so the user can paste it.
-        UIPasteboard.general.string = gif.url
-        let ok = await UIApplication.shared.open(URL(string: "discord://")!)
-        if ok {
-            Task { try? await client?.trackCopy(id: gif.id) }
-            return true
-        } else {
-            errorMessage = "Copied URL — but Discord isn't installed."
-            return false
-        }
-        #else
-        return false
-        #endif
+    }
+    #endif
+
+    /// Records a completed share (e.g. via the iOS share sheet) against the
+    /// server's copy counter.
+    public func trackShare(_ gif: GIFItem) {
+        Task { try? await client?.trackCopy(id: gif.id) }
     }
 
     public func updateTags(_ gif: GIFItem, tags: String) async {

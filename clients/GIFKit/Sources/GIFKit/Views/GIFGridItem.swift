@@ -36,6 +36,15 @@ public struct GIFGridItem: View {
         self.onDelete = onDelete
     }
 
+    // macOS pastes straight into Discord; iOS presents the share sheet.
+    private var sendLabel: String {
+        #if os(macOS)
+        "Send to Discord"
+        #else
+        "Share"
+        #endif
+    }
+
     private var cardBackground: Color {
         #if os(macOS)
         Color(.controlBackgroundColor)
@@ -103,7 +112,7 @@ public struct GIFGridItem: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
-                .help("Send to Discord")
+                .help(sendLabel)
 
                 Button { onRename() } label: {
                     Image(systemName: "pencil")
@@ -128,7 +137,7 @@ public struct GIFGridItem: View {
         .contextMenu {
             Button("Copy Direct URL") { onCopyRaw() }
             Button("Copy Embed URL") { onCopyEmbed() }
-            Button("Send to Discord") { onSendToDiscord() }
+            Button(sendLabel) { onSendToDiscord() }
             Divider()
             Button("Edit Tags...") { onEditTags() }
             Button("Rename...") { onRename() }

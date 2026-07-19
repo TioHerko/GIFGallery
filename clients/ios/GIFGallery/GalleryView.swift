@@ -5,6 +5,7 @@ struct GalleryView: View {
     @Bindable var viewModel: GalleryViewModel
     @AppStorage("gridSize") private var gridSizeRaw = GridSize.medium.rawValue
     @State private var showSettings = false
+    @State private var sharingGIF: GIFItem?
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
@@ -50,13 +51,7 @@ struct GalleryView: View {
                                         viewModel.copyRawURL(gif)
                                         flash("Direct URL copied")
                                     },
-                                    onSendToDiscord: {
-                                        Task {
-                                            if await viewModel.sendToDiscord(gif) {
-                                                flash("Sent to Discord")
-                                            }
-                                        }
-                                    },
+                                    onSendToDiscord: { sharingGIF = gif },
                                     onEditTags: { viewModel.editingTagsGIF = gif },
                                     onRename: { viewModel.renamingGIF = gif },
                                     onDelete: { viewModel.deletingGIF = gif }
@@ -121,6 +116,20 @@ struct GalleryView: View {
         }
         .sheet(item: $viewModel.renamingGIF) { gif in
             RenameSheet(gif: gif, viewModel: viewModel)
+        }
+        .sheet(item: $sharingGIF) { gif in
+            // Share the raw GIF URL — Discord (and most chat apps) unfurl it
+            // into the animated embed, same as pasting it.
+            if let url = URL(string: gif.url) {
+                ShareSheet(items: [url]) { completed in
+                    sharingGIF = nil
+                    if completed {
+                        viewModel.trackShare(gif)
+                        flash("Shared")
+                    }
+                }
+                .presentationDetents([.medium, .large])
+            }
         }
         .confirmationDialog(
             "Delete GIF?",
