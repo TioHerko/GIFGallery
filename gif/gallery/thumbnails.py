@@ -5,6 +5,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.files.base import ContentFile
 from PIL import Image, ImageSequence
+from pygifsicle import optimize
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,15 @@ def thumbnail_filename(gif):
     return f"{gif.id}.gif"
 
 
+def optimize_in_place(path):
+    """Best-effort gifsicle pass: don't fail if gifsicle is missing (dev
+    machines) or chokes on the file."""
+    try:
+        optimize(path)
+    except Exception:
+        logger.warning("gifsicle failed for %s", path, exc_info=True)
+
+
 def build_thumbnail(gif, save=True):
     """Generate and attach a thumbnail file to ``gif``. Returns True if a
     thumbnail was created (or already existed and is still valid), False if
@@ -89,4 +99,5 @@ def build_thumbnail(gif, save=True):
         return False
 
     gif.thumbnail.save(thumbnail_filename(gif), ContentFile(data), save=save)
+    optimize_in_place(gif.thumbnail.path)
     return True

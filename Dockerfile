@@ -7,7 +7,7 @@
 # ASGI with uvicorn. Persistent data (SQLite DB + uploaded GIFs) is expected
 # on a mounted volume via DJANGO_DB_PATH / DJANGO_MEDIA_ROOT.
 
-FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
+FROM ghcr.io/astral-sh/uv:python3.14-trixie-slim
 
 # uv/runtime environment:
 #  - compile bytecode for faster startup
@@ -20,6 +20,8 @@ ENV UV_COMPILE_BYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
+
+RUN apt update && apt -y install gifsicle  && apt -y dist-upgrade
 
 # Install dependencies first (without the project source) so this layer is
 # cached and only rebuilt when the lockfile changes.
