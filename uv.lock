@@ -118,6 +118,7 @@ dependencies = [
     { name = "django", version = "6.0.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "nanoid" },
     { name = "pillow" },
+    { name = "pygifsicle" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -127,6 +128,7 @@ requires-dist = [
     { name = "django", specifier = ">=5.2.11" },
     { name = "nanoid", specifier = ">=2.0.0" },
     { name = "pillow", specifier = ">=12.2.0" },
+    { name = "pygifsicle", specifier = ">=1.1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
 
@@ -300,6 +302,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/08/14/f6ba68107680ffa74b39985f3f30884e41318fbc4250caa423c79b4788bb/pillow-12.3.0-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e7e480451b9fa137494bccd3a7d69adbe8ac65a87d97be61e11f1b1050a5bac3", size = 5860358, upload-time = "2026-07-01T11:56:32.68Z" },
     { url = "https://files.pythonhosted.org/packages/36/54/0169bc772ec491108b62f644f8ecf1fe5d8ae5ebafde2ee2142210166903/pillow-12.3.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:04f01d28a6aaff387bf842a13be313df23ba0597a44f1a976c9feb3c6ff4711a", size = 7231786, upload-time = "2026-07-01T11:56:35.046Z" },
 ]
+
+[[package]]
+name = "pygifsicle"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/43/e3d2b8922257902ce86fce33a860b2459de0d9257521cc1f1a0d9929ecc5/pygifsicle-1.1.0.tar.gz", hash = "sha256:dcef433520ace4c1136dfc7060e77042142a3dbd6bdb6a19bd9149ef5cbe7441", size = 5412, upload-time = "2024-07-06T19:43:20.136Z" }
 
 [[package]]
 name = "python-dotenv"
