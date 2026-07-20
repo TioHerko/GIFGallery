@@ -34,8 +34,13 @@
         <div id="drop-zone"
              class="border-2 border-dashed border-base-content/20 rounded-xl p-8 text-center cursor-pointer
                     hover:border-primary/50 transition-colors">
-            <p class="opacity-50">Drag & drop GIFs here, or click to select</p>
-            <input type="file" name="files" id="file-input" multiple accept="image/gif,.gif" hidden>
+            <p class="opacity-50">Drag &amp; drop GIFs or videos here, or click to select</p>
+            <p class="mt-2 text-xs opacity-40">
+                Videos (MP4, MOV, MKV) up to {{ max_video_seconds }} seconds are converted to GIF.
+                Longer clips are rejected.
+            </p>
+            <input type="file" name="files" id="file-input" multiple
+                   accept="image/gif,.gif,video/mp4,video/quicktime,video/x-matroska,.mp4,.mov,.mkv,.m4v,.webm" hidden>
         </div>
 
         <div id="preview" class="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2"></div>
@@ -45,6 +50,7 @@
 </div>
 
 <script>
+const MAX_VIDEO_SECONDS = {{ max_video_seconds }};
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const preview = document.getElementById('preview');
@@ -73,25 +79,78 @@ fileInput.addEventListener('change', () => {
 
 const selectedFiles = new DataTransfer();
 
-function addFiles(files) {
-    for (const file of files) {
-        if (file.type === 'image/gif' || file.name.endsWith('.gif')) {
-            selectedFiles.items.add(file);
-            const div = document.createElement('div');
-            div.className = 'card bg-base-100 overflow-hidden';
-            const img = document.createElement('img');
-            img.src = URL.createObjectURL(file);
-            img.className = 'w-full';
-            const name = document.createElement('div');
-            name.className = 'px-1 py-1 text-xs text-center opacity-60 truncate';
-            name.textContent = file.name;
-            div.appendChild(img);
-            div.appendChild(name);
-            preview.appendChild(div);
-        }
-    }
+const VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.m4v', '.webm'];
+
+function isGif(file) {
+    return file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+}
+
+function isVideo(file) {
+    return file.type.startsWith('video/') ||
+        VIDEO_EXTS.some(ext => file.name.toLowerCase().endsWith(ext));
+}
+
+function makeCard(file, mediaEl, note) {
+    const div = document.createElement('div');
+    div.className = 'card bg-base-100 overflow-hidden';
+    mediaEl.className = 'w-full';
+    const name = document.createElement('div');
+    name.className = 'px-1 py-1 text-xs text-center opacity-60 truncate';
+    name.textContent = note || file.name;
+    div.appendChild(mediaEl);
+    div.appendChild(name);
+    preview.appendChild(div);
+}
+
+function accept(file, mediaEl) {
+    selectedFiles.items.add(file);
     fileInput.files = selectedFiles.files;
     submitBtn.disabled = selectedFiles.files.length === 0;
+    makeCard(file, mediaEl);
+}
+
+function reject(file, message) {
+    const div = document.createElement('div');
+    div.className = 'card bg-base-100 overflow-hidden opacity-60 border border-error/40';
+    const body = document.createElement('div');
+    body.className = 'p-2 text-xs text-center text-error';
+    body.textContent = message;
+    const name = document.createElement('div');
+    name.className = 'px-1 pb-1 text-xs text-center opacity-60 truncate';
+    name.textContent = file.name;
+    div.appendChild(body);
+    div.appendChild(name);
+    preview.appendChild(div);
+}
+
+function addFiles(files) {
+    for (const file of files) {
+        if (isGif(file)) {
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            accept(file, img);
+        } else if (isVideo(file)) {
+            // Check the duration client-side for instant feedback; the server
+            // re-checks authoritatively before converting.
+            const video = document.createElement('video');
+            video.src = URL.createObjectURL(file);
+            video.muted = true;
+            video.loop = true;
+            video.autoplay = true;
+            video.playsInline = true;
+            video.addEventListener('loadedmetadata', () => {
+                if (video.duration > MAX_VIDEO_SECONDS + 0.5) {
+                    URL.revokeObjectURL(video.src);
+                    reject(file, `Too long (${video.duration.toFixed(1)}s > ${MAX_VIDEO_SECONDS}s)`);
+                } else {
+                    accept(file, video);
+                }
+            });
+            video.addEventListener('error', () => {
+                reject(file, 'Unreadable video');
+            });
+        }
+    }
 }
 </script>
 {% endblock %}

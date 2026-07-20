@@ -25,20 +25,28 @@ from django.core.files.base import ContentFile
 from .auth import auth_required
 from .models import APIToken, Gif, Tag
 from .thumbnails import generate_thumbnail_bytes, optimize_in_place, thumbnail_filename
+from .video import VideoConversionError, convert_upload_to_gif, looks_like_video
 
 GIF_MAGIC = (b"GIF87a", b"GIF89a")
 
 
-def _validate_upload(f):
-    """Return an error string if the uploaded file is not an acceptable GIF."""
+def _classify_upload(f):
+    """Classify an uploaded file.
+
+    Returns ``(kind, error)`` where ``kind`` is ``"gif"`` or ``"video"`` and
+    ``error`` is ``None``, or ``(None, message)`` if the file is neither an
+    acceptable GIF nor a supported video container.
+    """
     if f.size > settings.GIF_MAX_UPLOAD_BYTES:
         max_mb = settings.GIF_MAX_UPLOAD_BYTES // (1024 * 1024)
-        return f"{f.name}: larger than {max_mb} MB"
-    header = f.read(6)
+        return None, f"{f.name}: larger than {max_mb} MB"
+    header = f.read(12)
     f.seek(0)
-    if header not in GIF_MAGIC:
-        return f"{f.name}: not a GIF file"
-    return None
+    if header[:6] in GIF_MAGIC:
+        return "gif", None
+    if looks_like_video(header):
+        return "video", None
+    return None, f"{f.name}: not a GIF or supported video (mp4, mov, mkv)"
 
 
 class FirstRunLoginView(LoginView):
@@ -314,10 +322,34 @@ async def upload_view(request):
         tag_names = request.POST.get("tags", "")
         title_prefix = request.POST.get("title_prefix", "").strip()
 
-        # Reject the batch if anything isn't a real GIF: uploads are stored
-        # under their original extension, so accepting arbitrary content
-        # (e.g. HTML/SVG) would plant scriptable files on this origin.
-        errors = [e for e in (_validate_upload(f) for f in files) if e]
+        # Classify (and, for videos, transcode) every file before creating any
+        # Gif, so the batch stays all-or-nothing. Uploads are stored under
+        # their original extension, so accepting arbitrary content (e.g.
+        # HTML/SVG) would plant scriptable files on this origin; videos are
+        # never stored — only the GIF ffmpeg produces from them is.
+        prepared = []  # (title, source_file) where source_file is a GIF
+        errors = []
+        for f in files:
+            kind, error = _classify_upload(f)
+            if error:
+                errors.append(error)
+                continue
+            title = f"{title_prefix} {f.name}" if title_prefix else f.name
+            # Strip file extension from title
+            if "." in title:
+                title = title.rsplit(".", 1)[0]
+            if kind == "video":
+                try:
+                    gif_bytes = await sync_to_async(
+                        convert_upload_to_gif, thread_sensitive=False
+                    )(f)
+                except VideoConversionError as exc:
+                    errors.append(f"{f.name}: {exc}")
+                    continue
+                prepared.append((title, ContentFile(gif_bytes, name=f"{title}.gif")))
+            else:
+                prepared.append((title, f))
+
         if errors:
             return JsonResponse({"errors": errors}, status=400)
 
@@ -333,12 +365,10 @@ async def upload_view(request):
                 tags.append(tag)
 
         created = []
-        for f in files:
-            title = f"{title_prefix} {f.name}" if title_prefix else f.name
-            # Strip file extension from title
-            if "." in title:
-                title = title.rsplit(".", 1)[0]
-            gif = await Gif.objects.acreate(title=title, file=f, owner=request.user)
+        for title, source in prepared:
+            gif = await Gif.objects.acreate(
+                title=title, file=source, owner=request.user
+            )
             await gif.tags.aset(tags)
             await sync_to_async(optimize_in_place, thread_sensitive=False)(
                 gif.file.path
@@ -365,7 +395,11 @@ async def upload_view(request):
         return redirect("gallery:gallery")
 
     tags = [tag async for tag in Tag.objects.all()]
-    return render(request, "gallery/upload.html", {"tags": tags})
+    return render(
+        request,
+        "gallery/upload.html",
+        {"tags": tags, "max_video_seconds": settings.VIDEO_MAX_DURATION_SECONDS},
+    )
 
 
 @auth_required
