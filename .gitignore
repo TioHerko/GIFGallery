@@ -17,6 +17,10 @@ clients/macos/.swiftpm
 # Virtual environments
 .venv
 
+# Editor / tooling
+.idea/
+.claude/
+
 # Django
 *.sqlite3
 gif/media/
