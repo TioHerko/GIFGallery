@@ -1,11 +1,16 @@
+import shutil
+import subprocess
 import tempfile
+import unittest
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
+from PIL import Image
 
 from .models import APIToken, Gif
+from .video import looks_like_video
 
 # Smallest valid GIF: 1x1 transparent pixel.
 TINY_GIF = (
@@ -523,3 +528,106 @@ class FaviconTests(TestCase):
         User.objects.create_user("u", password="pw")
         response = self.client.get("/login/")
         self.assertContains(response, "/static/gallery/favicon-32.png")
+
+
+_HAVE_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+
+
+def _make_video(seconds, size="64x64", rate=10):
+    """Render a tiny test video with ffmpeg and return its bytes."""
+    tmp = tempfile.mkdtemp(prefix="gif-test-video-")
+    path = f"{tmp}/clip.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-nostdin", "-y", "-loglevel", "error",
+            "-f", "lavfi",
+            "-i", f"testsrc=duration={seconds}:size={size}:rate={rate}",
+            "-pix_fmt", "yuv420p",
+            path,
+        ],
+        check=True,
+        capture_output=True,
+    )
+    with open(path, "rb") as f:
+        data = f.read()
+    shutil.rmtree(tmp, ignore_errors=True)
+    return data
+
+
+class VideoSniffTests(TestCase):
+    def test_mp4_header_detected(self):
+        self.assertTrue(looks_like_video(b"\x00\x00\x00\x18ftypmp42"))
+
+    def test_mkv_header_detected(self):
+        self.assertTrue(looks_like_video(b"\x1a\x45\xdf\xa3\x01\x00\x00\x00"))
+
+    def test_gif_is_not_video(self):
+        self.assertFalse(looks_like_video(TINY_GIF[:12]))
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA)
+class VideoUploadTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("v", password="pw")
+        self.client.force_login(self.user)
+
+    def upload(self, name, content):
+        return self.client.post(
+            "/upload/",
+            {"files": SimpleUploadedFile(name, content)},
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+
+    def test_upload_page_communicates_limit(self):
+        response = self.client.get("/upload/")
+        self.assertContains(response, "up to 10 seconds")
+
+    def test_non_media_rejected_with_clear_message(self):
+        response = self.upload("notes.txt", b"just some text, definitely not media")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(
+            "not a GIF or supported video", response.json()["errors"][0]
+        )
+        self.assertEqual(Gif.objects.count(), 0)
+
+    @unittest.skipUnless(_HAVE_FFMPEG, "ffmpeg/ffprobe not installed")
+    def test_short_video_converted_to_gif(self):
+        response = self.upload("clip.mp4", _make_video(seconds=1))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(Gif.objects.count(), 1)
+        gif = Gif.objects.get()
+        # The stored file is a real GIF produced by ffmpeg, not the movie.
+        self.assertTrue(gif.file.name.endswith(".gif"))
+        with gif.file.open("rb") as f:
+            self.assertIn(f.read(6), (b"GIF87a", b"GIF89a"))
+
+    @unittest.skipUnless(_HAVE_FFMPEG, "ffmpeg/ffprobe not installed")
+    @override_settings(VIDEO_MAX_DURATION_SECONDS=2)
+    def test_video_over_limit_rejected(self):
+        response = self.upload("long.mp4", _make_video(seconds=4, size="32x32", rate=4))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("the limit is 2 seconds", response.json()["errors"][0])
+        self.assertEqual(Gif.objects.count(), 0)
+
+    @unittest.skipUnless(_HAVE_FFMPEG, "ffmpeg/ffprobe not installed")
+    def test_small_dimensions_and_frames_preserved(self):
+        response = self.upload("clip.mp4", _make_video(seconds=1, size="48x64", rate=10))
+        self.assertEqual(response.status_code, 200, response.content)
+        gif = Gif.objects.get()
+        with Image.open(gif.file.path) as im:
+            # Under the width cap, so dimensions are untouched.
+            self.assertEqual(im.size, (48, 64))
+            self.assertGreater(getattr(im, "n_frames", 1), 1)
+
+    @unittest.skipUnless(_HAVE_FFMPEG, "ffmpeg/ffprobe not installed")
+    @override_settings(VIDEO_MAX_WIDTH=640)
+    def test_wide_video_downscaled_to_max_width(self):
+        # 1280x720 source → capped to 640 wide, aspect ratio preserved (360h).
+        response = self.upload(
+            "big.mp4", _make_video(seconds=1, size="1280x720", rate=8)
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        gif = Gif.objects.get()
+        with Image.open(gif.file.path) as im:
+            self.assertEqual(im.width, 640)
+            self.assertEqual(im.height, 360)

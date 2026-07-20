@@ -65,6 +65,16 @@ if IS_PRODUCTION:
 # proxyless deployment (e.g. the bare Docker container) capped too.
 GIF_MAX_UPLOAD_BYTES = int(os.environ.get('GIF_MAX_UPLOAD_BYTES', 50 * 1024 * 1024))
 
+# Video uploads (mp4/mov/mkv) are transcoded to GIF with ffmpeg, preserving the
+# source framerate and downscaling to at most VIDEO_MAX_WIDTH px wide (aspect
+# ratio preserved, narrower clips untouched). Only clips up to
+# VIDEO_MAX_DURATION_SECONDS are accepted (also surfaced in the upload UI). The
+# ffmpeg/ffprobe calls are bounded by FFMPEG_TIMEOUT_SECONDS so a pathological
+# file can't hang a worker.
+VIDEO_MAX_DURATION_SECONDS = int(os.environ.get('VIDEO_MAX_DURATION_SECONDS', 10))
+VIDEO_MAX_WIDTH = int(os.environ.get('VIDEO_MAX_WIDTH', 640))
+FFMPEG_TIMEOUT_SECONDS = int(os.environ.get('FFMPEG_TIMEOUT_SECONDS', 120))
+
 
 # Application definition
 

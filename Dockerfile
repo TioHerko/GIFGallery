@@ -21,7 +21,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt update && apt -y install gifsicle  && apt -y dist-upgrade
+RUN apt update && apt -y install gifsicle ffmpeg && apt -y dist-upgrade
 
 # Install dependencies first (without the project source) so this layer is
 # cached and only rebuilt when the lockfile changes.
