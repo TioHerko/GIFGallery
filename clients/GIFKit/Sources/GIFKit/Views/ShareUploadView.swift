@@ -34,17 +34,22 @@ public struct ShareUploadView: View {
                 ProgressView("Reading GIFs…")
                     .frame(maxWidth: .infinity, minHeight: 120)
             } else if payloads.isEmpty {
-                Text("Nothing that was shared is a GIF.")
+                Text("Nothing that was shared can be uploaded.")
                     .foregroundStyle(.secondary)
                 failureList
                 closeButton
             } else {
-                AnimatedGIFView(data: payloads[0].data)
+                preview(for: payloads[0])
                     .frame(maxWidth: .infinity, minHeight: 100, maxHeight: 180)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 if payloads.count > 1 {
-                    Text("\(payloads.count) GIFs")
+                    Text("\(payloads.count) items")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if payloads.contains(where: \.isVideo) {
+                    Text("Videos are converted to GIFs on upload.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -80,6 +85,28 @@ public struct ShareUploadView: View {
         .task { await loadAttachments() }
     }
 
+    /// GIFs animate inline; videos (which the on-device decoder can't play
+    /// as GIFs) get an icon placeholder with the filename.
+    @ViewBuilder
+    private func preview(for payload: SharePayload) -> some View {
+        if payload.isVideo {
+            VStack(spacing: 8) {
+                Image(systemName: "film")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.secondary)
+                Text(payload.filename)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.quaternary)
+        } else {
+            AnimatedGIFView(data: payload.data)
+        }
+    }
+
     @ViewBuilder
     private var failureList: some View {
         ForEach(failures, id: \.self) { failure in
@@ -98,9 +125,20 @@ public struct ShareUploadView: View {
     }
 
     private func loadAttachments() async {
+        // Learn the server's video length limit so an over-long clip is
+        // rejected here instead of after a wasted upload.
+        var maxSeconds: Double?
+        if let client { maxSeconds = try? await client.fetchConfig().videoMaxDurationSeconds }
         for provider in providers {
             do {
-                payloads.append(try await GIFIngest.load(from: provider))
+                let payload = try await GIFIngest.load(from: provider)
+                if let maxSeconds,
+                   let reason = await UploadMedia.overLengthReason(
+                       data: payload.data, name: payload.filename, maxSeconds: maxSeconds) {
+                    failures.append(reason)
+                    continue
+                }
+                payloads.append(payload)
             } catch {
                 failures.append(error.localizedDescription)
             }

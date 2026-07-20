@@ -554,6 +554,28 @@ def _make_video(seconds, size="64x64", rate=10):
     return data
 
 
+class APIConfigTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("c", password="pw")
+
+    def test_requires_auth(self):
+        self.assertEqual(self.client.get("/api/config/").status_code, 401)
+
+    @override_settings(VIDEO_MAX_DURATION_SECONDS=10, VIDEO_MAX_WIDTH=640)
+    def test_reports_limits(self):
+        token, raw = APIToken.create_token(self.user, name="t")
+        response = self.client.get(
+            "/api/config/", headers={"authorization": f"Bearer {raw}"}
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["video_max_duration_seconds"], 10)
+        self.assertEqual(body["video_max_width"], 640)
+        self.assertIn("mp4", body["video_extensions"])
+        self.assertTrue(all("." not in ext for ext in body["video_extensions"]))
+        self.assertGreater(body["max_upload_bytes"], 0)
+
+
 class VideoSniffTests(TestCase):
     def test_mp4_header_detected(self):
         self.assertTrue(looks_like_video(b"\x00\x00\x00\x18ftypmp42"))

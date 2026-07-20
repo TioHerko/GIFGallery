@@ -61,6 +61,12 @@ public struct APIClient: Sendable {
 
     // MARK: - Endpoints
 
+    public func fetchConfig() async throws -> ServerConfig {
+        let req = request("api/config/")
+        let (data, _) = try await URLSession.shared.data(for: req)
+        return try decoder.decode(ServerConfig.self, from: data)
+    }
+
     public func listGIFs(tag: String? = nil, query: String? = nil) async throws -> [GIFItem] {
         var params: [String: String] = [:]
         if let tag, !tag.isEmpty { params["tag"] = tag }
@@ -127,14 +133,23 @@ public struct APIClient: Sendable {
                 .replacingOccurrences(of: "\"", with: "'")
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"files\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-            body.append("Content-Type: image/gif\r\n\r\n".data(using: .utf8)!)
+            body.append("Content-Type: \(payload.contentType)\r\n\r\n".data(using: .utf8)!)
             body.append(payload.data)
             body.append("\r\n".data(using: .utf8)!)
         }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         req.httpBody = body
 
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        // The server rejects a whole batch with 400 and {"errors": [...]} —
+        // e.g. a video longer than the allowed limit. Surface those messages
+        // instead of failing to decode the success shape.
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            if let body = try? decoder.decode(UploadErrorResponse.self, from: data), !body.errors.isEmpty {
+                throw APIError.upload(body.errors.joined(separator: "\n"))
+            }
+            throw APIError.http(http.statusCode)
+        }
         return try decoder.decode(UploadResponse.self, from: data).created
     }
 

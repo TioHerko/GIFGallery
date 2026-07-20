@@ -24,4 +24,5 @@ urlpatterns = [
         name="delete_token",
     ),
     path("api/gifs/", views.api_list_gifs, name="api_list_gifs"),
+    path("api/config/", views.api_config, name="api_config"),
 ]

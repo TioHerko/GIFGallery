@@ -12,12 +12,13 @@ struct UploadSheet: View {
     @State private var stagingDir: URL?
     @State private var photoCounter = 0
     @State private var skippedCount = 0
+    @State private var rejected: [String] = []
     @State private var showFileImporter = false
     @State private var tags = ""
     @State private var titlePrefix = ""
     @State private var isUploading = false
 
-    /// Picked GIFs are staged to a temp file right away so the sheet never
+    /// Picked media is staged to a temp file right away so the sheet never
     /// holds every selection in memory at once (the upload body is built
     /// from disk by APIClient).
     private struct PendingFile: Identifiable {
@@ -26,14 +27,11 @@ struct UploadSheet: View {
         let url: URL
     }
 
-    /// GIF87a / GIF89a both start with "GIF8".
-    private static let gifMagic = Data("GIF8".utf8)
-
     var body: some View {
         NavigationStack {
             Form {
-                Section("GIFs") {
-                    PhotosPicker(selection: $photoSelection, matching: .images) {
+                Section {
+                    PhotosPicker(selection: $photoSelection, matching: .any(of: [.images, .videos])) {
                         Label("Choose from Photos…", systemImage: "photo.on.rectangle")
                     }
 
@@ -68,10 +66,17 @@ struct UploadSheet: View {
                     }
 
                     if skippedCount > 0 {
-                        Text("Skipped \(skippedCount) non-GIF item(s).")
+                        Text("Skipped \(skippedCount) unsupported item(s).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    ForEach(rejected, id: \.self) { reason in
+                        Text(reason)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                } footer: {
+                    Text("Short videos (MP4, MOV, MKV) are converted to GIFs on upload.")
                 }
 
                 Section("Details") {
@@ -105,7 +110,7 @@ struct UploadSheet: View {
             }
             .fileImporter(
                 isPresented: $showFileImporter,
-                allowedContentTypes: [.gif],
+                allowedContentTypes: UploadMedia.pickerContentTypes,
                 allowsMultipleSelection: true
             ) { result in
                 importFiles(result)
@@ -136,10 +141,11 @@ struct UploadSheet: View {
         pendingFiles = []
     }
 
-    /// Writes one validated GIF into the staging dir (off the main actor)
-    /// and records it, deduplicating names as they are staged.
+    /// Writes one validated file into the staging dir (off the main actor)
+    /// and records it, deduplicating names as they are staged. The caller is
+    /// responsible for giving `rawName` a correct extension (.gif / .mp4 / …).
     private func appendStaged(name rawName: String, data: Data, dir: URL) async {
-        var name = rawName.lowercased().hasSuffix(".gif") ? rawName : rawName + ".gif"
+        var name = rawName
         while pendingFiles.contains(where: { $0.name == name }) {
             name = "\(UUID().uuidString.prefix(8))-\(name)"
         }
@@ -159,15 +165,24 @@ struct UploadSheet: View {
         photoSelection = []
         Task {
             guard let dir = ensureStagingDir() else { return }
+            let maxSeconds = await viewModel.videoMaxDurationSeconds()
             for item in items {
+                // Sniff the bytes so only server-acceptable media (GIF or a
+                // supported video) is staged, and name it by its real type.
                 guard let data = try? await item.loadTransferable(type: Data.self),
-                      data.starts(with: Self.gifMagic)
+                      let described = UploadMedia.describe(data)
                 else {
                     skippedCount += 1
                     continue
                 }
+                if described.contentType.hasPrefix("video/"), let maxSeconds,
+                   let reason = await UploadMedia.overLengthReason(
+                       data: data, name: "A selected video", maxSeconds: maxSeconds) {
+                    rejected.append(reason)
+                    continue
+                }
                 photoCounter += 1
-                await appendStaged(name: "photo-\(photoCounter).gif", data: data, dir: dir)
+                await appendStaged(name: "photo-\(photoCounter).\(described.ext)", data: data, dir: dir)
             }
         }
     }
@@ -176,6 +191,7 @@ struct UploadSheet: View {
         guard case .success(let urls) = result else { return }
         Task {
             guard let dir = ensureStagingDir() else { return }
+            let maxSeconds = await viewModel.videoMaxDurationSeconds()
             for url in urls {
                 // Copy the data out immediately — access to the security-scoped
                 // resource ends as soon as we stop accessing it.
@@ -184,8 +200,14 @@ struct UploadSheet: View {
                     defer { if accessing { url.stopAccessingSecurityScopedResource() } }
                     return try? Data(contentsOf: url)
                 }.value
-                guard let data, data.starts(with: Self.gifMagic) else {
+                guard let data, let described = UploadMedia.describe(data) else {
                     skippedCount += 1
+                    continue
+                }
+                if described.contentType.hasPrefix("video/"), let maxSeconds,
+                   let reason = await UploadMedia.overLengthReason(
+                       data: data, name: url.lastPathComponent, maxSeconds: maxSeconds) {
+                    rejected.append(reason)
                     continue
                 }
                 await appendStaged(name: url.lastPathComponent, data: data, dir: dir)

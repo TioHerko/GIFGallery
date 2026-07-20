@@ -52,6 +52,7 @@ uv run python manage.py collectstatic    # for production
 | URL | Auth | Purpose |
 |-----|------|---------|
 | `/` | Yes | Gallery with tag filter and search (`?tag=`, `?q=`) |
+| `/api/config/` | Yes | Upload limits (video max duration/width, max bytes, video extensions) as JSON — clients validate before uploading |
 | `/gif/<id>/` | No | Serve GIF file (public, cached) |
 | `/gif/<id>/tags/` | Yes | POST to update tags (JSON response) |
 | `/upload/` | Yes | Multi-file upload with drag-drop |

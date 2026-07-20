@@ -10,11 +10,12 @@
     <dict>
         <key>NSExtensionAttributes</key>
         <dict>
-            <!-- Show for GIF attachments and URLs. Non-GIF files still match
-                 via public.url (file URLs conform to it); GIFIngest validates
-                 the actual bytes and explains when something isn't a GIF. -->
+            <!-- Show for GIF/video attachments and URLs. Other files still
+                 match via public.url (file URLs conform to it); GIFIngest
+                 validates the actual bytes and explains when something isn't
+                 a GIF or supported video. -->
             <key>NSExtensionActivationRule</key>
-            <string>SUBQUERY(extensionItems, $extensionItem, SUBQUERY($extensionItem.attachments, $attachment, ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.compuserve.gif" OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url").@count &gt; 0).@count &gt; 0</string>
+            <string>SUBQUERY(extensionItems, $extensionItem, SUBQUERY($extensionItem.attachments, $attachment, ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.compuserve.gif" OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.movie" OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url").@count &gt; 0).@count &gt; 0</string>
         </dict>
         <key>NSExtensionPointIdentifier</key>
         <string>com.apple.share-services</string>

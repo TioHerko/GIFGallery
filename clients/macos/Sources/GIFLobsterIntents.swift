@@ -121,13 +121,13 @@ struct RandomGIFIntent: AppIntent {
 struct UploadGIFsIntent: AppIntent {
     static let title: LocalizedStringResource = "Upload GIFs"
     static let description = IntentDescription(
-        "Uploads GIFs to the gallery with optional tags.",
+        "Uploads GIFs (and short videos, converted to GIFs) to the gallery with optional tags.",
         categoryName: "Gallery"
     )
 
-    // No supportedContentTypes: that initializer needs iOS 18, and the GIF
-    // magic bytes are validated below anyway.
-    @Parameter(title: "GIFs")
+    // No supportedContentTypes: that initializer needs iOS 18, and the magic
+    // bytes are validated below anyway.
+    @Parameter(title: "GIFs or Videos")
     var files: [IntentFile]
 
     @Parameter(title: "Tags (comma-separated)")
@@ -145,9 +145,24 @@ struct UploadGIFsIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
         let client = try IntentSupport.client()
-        let payloads = files.compactMap { file -> SharePayload? in
-            guard GIFIngest.isGIF(file.data) else { return nil }
-            return SharePayload(filename: file.filename, data: file.data)
+        // The server owns the real video length limit; fetch it so an
+        // over-long clip fails here instead of after a wasted upload.
+        let maxSeconds = try? await client.fetchConfig().videoMaxDurationSeconds
+        var payloads: [SharePayload] = []
+        for file in files {
+            // Accept GIFs and the short videos the server transcodes; name the
+            // part by its real type so the upload behaves.
+            guard let described = UploadMedia.describe(file.data) else { continue }
+            let ext = (file.filename as NSString).pathExtension.lowercased()
+            let filename = (ext == "gif" || UploadMedia.videoExtensions.contains(ext))
+                ? file.filename
+                : (file.filename as NSString).deletingPathExtension + "." + described.ext
+            if let maxSeconds,
+               await UploadMedia.overLengthReason(
+                   data: file.data, name: filename, maxSeconds: maxSeconds) != nil {
+                throw IntentError.tooLong
+            }
+            payloads.append(SharePayload(filename: filename, data: file.data, contentType: described.contentType))
         }
         guard !payloads.isEmpty else { throw IntentError.notAGIF }
         let created = try await client.upload(
@@ -180,6 +195,7 @@ enum IntentError: Error, CustomLocalizedStringResourceConvertible {
     case notConfigured
     case noMatches
     case notAGIF
+    case tooLong
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
@@ -188,7 +204,9 @@ enum IntentError: Error, CustomLocalizedStringResourceConvertible {
         case .noMatches:
             "No GIFs matched."
         case .notAGIF:
-            "None of the files are GIFs."
+            "None of the files are GIFs or supported videos."
+        case .tooLong:
+            "A video is longer than the server's allowed limit."
         }
     }
 }
