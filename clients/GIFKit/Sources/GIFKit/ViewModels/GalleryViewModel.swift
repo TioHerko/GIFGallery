@@ -18,6 +18,9 @@ public final class GalleryViewModel {
     public var errorMessage: String?
     public var gifsPaused = false
 
+    /// Upload limits from the server, fetched once and cached.
+    public var serverConfig: ServerConfig?
+
     // Sheets
     public var editingTagsGIF: GIFItem?
     public var renamingGIF: GIFItem?
@@ -62,6 +65,16 @@ public final class GalleryViewModel {
     public func fetchGIFsIfConfigured() async {
         guard isConfigured else { return }
         await fetchGIFs()
+    }
+
+    /// The server's max video duration (seconds), fetching+caching the config
+    /// on first use. Nil if the server can't be reached or isn't configured —
+    /// callers then skip the client-side check and let the server decide.
+    public func videoMaxDurationSeconds() async -> Double? {
+        if serverConfig == nil, let client {
+            serverConfig = try? await client.fetchConfig()
+        }
+        return serverConfig?.videoMaxDurationSeconds
     }
 
     public func scheduleAutoPause() {

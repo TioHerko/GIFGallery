@@ -70,7 +70,7 @@ struct GalleryView: View {
                         .padding()
                     }
                 }
-                .onDrop(of: [.gif, .fileURL, .url], isTargeted: nil) { providers in
+                .onDrop(of: [.gif, .movie, .fileURL, .url], isTargeted: nil) { providers in
                     handleDrop(providers)
                     return true
                 }
@@ -203,15 +203,23 @@ struct GalleryView: View {
         Task {
             var payloads: [SharePayload] = []
             var firstError: String?
+            let maxSeconds = await viewModel.videoMaxDurationSeconds()
             for provider in providers {
                 do {
-                    payloads.append(try await GIFIngest.load(from: provider))
+                    let payload = try await GIFIngest.load(from: provider)
+                    if let maxSeconds,
+                       let reason = await UploadMedia.overLengthReason(
+                           data: payload.data, name: payload.filename, maxSeconds: maxSeconds) {
+                        if firstError == nil { firstError = reason }
+                        continue
+                    }
+                    payloads.append(payload)
                 } catch {
                     if firstError == nil { firstError = error.localizedDescription }
                 }
             }
             if payloads.isEmpty {
-                flash(firstError ?? "Nothing dropped was a GIF.")
+                flash(firstError ?? "Nothing dropped was a GIF or supported video.")
                 return
             }
             stagedPayloads.append(contentsOf: payloads)

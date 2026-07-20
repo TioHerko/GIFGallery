@@ -68,15 +68,24 @@ struct UploadSheet: View {
     private func pickFiles() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [UTType.gif]
+        panel.allowedContentTypes = UploadMedia.pickerContentTypes
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK else { return }
-        pickerError = nil
-        for url in panel.urls {
-            do {
-                payloads.append(try GIFIngest.ingest(fileURL: url))
-            } catch {
-                pickerError = error.localizedDescription
+        let urls = panel.urls
+        Task {
+            pickerError = nil
+            let maxSeconds = await viewModel.videoMaxDurationSeconds()
+            for url in urls {
+                if let maxSeconds,
+                   let reason = await UploadMedia.overLengthReason(url: url, maxSeconds: maxSeconds) {
+                    pickerError = reason
+                    continue
+                }
+                do {
+                    payloads.append(try GIFIngest.ingest(fileURL: url))
+                } catch {
+                    pickerError = error.localizedDescription
+                }
             }
         }
     }

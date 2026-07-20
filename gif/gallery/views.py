@@ -25,7 +25,12 @@ from django.core.files.base import ContentFile
 from .auth import auth_required
 from .models import APIToken, Gif, Tag
 from .thumbnails import generate_thumbnail_bytes, optimize_in_place, thumbnail_filename
-from .video import VideoConversionError, convert_upload_to_gif, looks_like_video
+from .video import (
+    VIDEO_EXTENSIONS,
+    VideoConversionError,
+    convert_upload_to_gif,
+    looks_like_video,
+)
 
 GIF_MAGIC = (b"GIF87a", b"GIF89a")
 
@@ -400,6 +405,18 @@ async def upload_view(request):
         "gallery/upload.html",
         {"tags": tags, "max_video_seconds": settings.VIDEO_MAX_DURATION_SECONDS},
     )
+
+
+@auth_required
+async def api_config(request):
+    """Upload limits, so clients can validate (e.g. video duration) before
+    sending a large request. Values come straight from settings."""
+    return JsonResponse({
+        "video_max_duration_seconds": settings.VIDEO_MAX_DURATION_SECONDS,
+        "video_max_width": settings.VIDEO_MAX_WIDTH,
+        "max_upload_bytes": settings.GIF_MAX_UPLOAD_BYTES,
+        "video_extensions": [ext.lstrip(".") for ext in VIDEO_EXTENSIONS],
+    })
 
 
 @auth_required

@@ -34,6 +34,19 @@
                 <string>com.compuserve.gif</string>
             </array>
         </dict>
+        <dict>
+            <!-- Short videos are transcoded to GIF by the server on upload. -->
+            <key>CFBundleTypeName</key>
+            <string>Movie</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.movie</string>
+            </array>
+        </dict>
     </array>
     <key>NSAppTransportSecurity</key>
     <dict>
