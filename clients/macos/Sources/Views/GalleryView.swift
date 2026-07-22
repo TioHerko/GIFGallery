@@ -40,9 +40,9 @@ struct GalleryView: View {
                             ForEach(viewModel.gifs) { gif in
                                 GIFGridItem(
                                     gif: gif,
-                                    gifData: viewModel.gifDataCache[gif.id],
                                     paused: viewModel.gifsPaused,
                                     gridSize: gridSize,
+                                    loadData: { await viewModel.loadGIFData(for: gif) },
                                     onCopyEmbed: {
                                         viewModel.copyEmbedURL(gif)
                                         flash("Embed URL copied")
@@ -62,9 +62,6 @@ struct GalleryView: View {
                                     onRename: { viewModel.renamingGIF = gif },
                                     onDelete: { viewModel.deletingGIF = gif }
                                 )
-                                .task(id: gif.id) {
-                                    await viewModel.loadGIFData(for: gif)
-                                }
                             }
                         }
                         .padding()

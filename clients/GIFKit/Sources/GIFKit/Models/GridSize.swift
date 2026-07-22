@@ -24,24 +24,9 @@ public enum GridSize: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    public var minHeight: CGFloat {
-        switch self {
-        case .small: return 70
-        case .medium: return 100
-        case .large: return 150
-        }
-    }
-
-    public var maxHeight: CGFloat {
-        switch self {
-        case .small: return 190
-        case .medium: return 300
-        case .large: return 450
-        }
-    }
-
-    /// Height of the placeholder shown while the GIF data loads.
-    public var placeholderHeight: CGFloat {
+    /// Fixed height of a cell's media area (placeholder and GIF alike), so
+    /// cells never reflow when their GIF finishes loading.
+    public var mediaHeight: CGFloat {
         switch self {
         case .small: return 100
         case .medium: return 150
