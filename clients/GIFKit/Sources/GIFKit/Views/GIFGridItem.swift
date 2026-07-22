@@ -2,9 +2,9 @@ import SwiftUI
 
 public struct GIFGridItem: View {
     public let gif: GIFItem
-    public let gifData: Data?
     public let paused: Bool
     public let gridSize: GridSize
+    public let loadData: () async -> Data?
     public let onCopyEmbed: () -> Void
     public let onCopyRaw: () -> Void
     public let onSendToDiscord: () -> Void
@@ -12,11 +12,15 @@ public struct GIFGridItem: View {
     public let onRename: () -> Void
     public let onDelete: () -> Void
 
+    /// Loaded per cell so a finished download re-renders only this cell,
+    /// not the whole grid.
+    @State private var gifData: Data?
+
     public init(
         gif: GIFItem,
-        gifData: Data?,
         paused: Bool,
         gridSize: GridSize,
+        loadData: @escaping () async -> Data?,
         onCopyEmbed: @escaping () -> Void,
         onCopyRaw: @escaping () -> Void,
         onSendToDiscord: @escaping () -> Void,
@@ -25,7 +29,7 @@ public struct GIFGridItem: View {
         onDelete: @escaping () -> Void
     ) {
         self.gif = gif
-        self.gifData = gifData
+        self.loadData = loadData
         self.paused = paused
         self.gridSize = gridSize
         self.onCopyEmbed = onCopyEmbed
@@ -56,16 +60,18 @@ public struct GIFGridItem: View {
     public var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .topTrailing) {
-                if let data = gifData {
-                    AnimatedGIFView(data: data, paused: paused)
-                        .frame(minHeight: gridSize.minHeight, maxHeight: gridSize.maxHeight)
-                        .clipped()
-                } else {
-                    Rectangle()
-                        .fill(.quaternary)
-                        .frame(height: gridSize.placeholderHeight)
-                        .overlay { ProgressView() }
+                Group {
+                    if let data = gifData {
+                        AnimatedGIFView(data: data, paused: paused, contentMode: .fill)
+                    } else {
+                        Rectangle()
+                            .fill(.quaternary)
+                            .overlay { ProgressView() }
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: gridSize.mediaHeight)
+                .clipped()
 
                 // Don't like the copy count
 //                if gif.copyCount > 0 {
@@ -139,6 +145,11 @@ public struct GIFGridItem: View {
         }
         .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .task(id: gif.id) {
+            if gifData == nil {
+                gifData = await loadData()
+            }
+        }
         .onTapGesture(perform: onCopyRaw)
         .contextMenu {
             Button("Copy Direct URL") { onCopyRaw() }

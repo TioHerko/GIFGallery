@@ -10,7 +10,16 @@ import Observation
 @Observable
 public final class GalleryViewModel {
     public var gifs: [GIFItem] = []
-    public var gifDataCache: [String: Data] = [:]
+
+    /// Raw GIF bytes keyed by GIF id. Deliberately not observed: cells load
+    /// their own data via `loadGIFData(for:)`, so a finished download
+    /// re-renders only its own cell instead of the whole grid. Bounded —
+    /// evicted entries re-fetch through URLSession's disk cache.
+    @ObservationIgnored private let gifDataCache: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.totalCostLimit = 64 * 1024 * 1024
+        return cache
+    }()
     public var searchQuery = ""
     public var selectedTag: String?
     public var availableTags: [Tag] = []
@@ -101,14 +110,19 @@ public final class GalleryViewModel {
         }
     }
 
-    public func loadGIFData(for gif: GIFItem) async {
-        guard gifDataCache[gif.id] == nil, let client else { return }
-        guard let url = URL(string: gif.displayUrl) else { return }
+    /// Returns the GIF's raw bytes, from cache or the network. Nil on
+    /// failure — the grid keeps showing that cell's placeholder.
+    public func loadGIFData(for gif: GIFItem) async -> Data? {
+        if let cached = gifDataCache.object(forKey: gif.id as NSString) {
+            return cached as Data
+        }
+        guard let client, let url = URL(string: gif.displayUrl) else { return nil }
         do {
             let data = try await client.fetchGIFData(from: url)
-            gifDataCache[gif.id] = data
+            gifDataCache.setObject(data as NSData, forKey: gif.id as NSString, cost: data.count)
+            return data
         } catch {
-            // Silently skip — the grid will show a placeholder
+            return nil
         }
     }
 
@@ -181,7 +195,7 @@ public final class GalleryViewModel {
         do {
             try await client.delete(id: gif.id)
             gifs.removeAll { $0.id == gif.id }
-            gifDataCache.removeValue(forKey: gif.id)
+            gifDataCache.removeObject(forKey: gif.id as NSString)
             rebuildTags()
         } catch {
             errorMessage = error.localizedDescription
