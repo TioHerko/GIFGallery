@@ -21,7 +21,7 @@ struct GalleryView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                tagBar
+                TagBar(viewModel: viewModel)
                     .padding(.horizontal)
                     .padding(.top, 8)
 
@@ -164,27 +164,6 @@ struct GalleryView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.cancelAutoPauseAndResume()
         }
-    }
-
-    private var tagBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                tagButton(label: "All", slug: nil)
-                ForEach(viewModel.availableTags) { tag in
-                    tagButton(label: tag.name, slug: tag.slug)
-                }
-            }
-        }
-    }
-
-    private func tagButton(label: String, slug: String?) -> some View {
-        Button(label) {
-            viewModel.selectedTag = slug
-            Task { await viewModel.fetchGIFs() }
-        }
-        .buttonStyle(.bordered)
-        .tint(viewModel.selectedTag == slug ? .accentColor : nil)
-        .controlSize(.small)
     }
 
     private func flash(_ msg: String) {
