@@ -126,6 +126,25 @@ public final class GalleryViewModel {
         }
     }
 
+    /// Returns the full-size GIF's bytes (never the thumbnail), for the
+    /// hover preview. Cached under its own key so it doesn't evict the
+    /// grid's thumbnail for the same GIF.
+    public func loadFullGIFData(for gif: GIFItem) async -> Data? {
+        guard gif.url != gif.displayUrl else { return await loadGIFData(for: gif) }
+        let key = "\(gif.id)/full" as NSString
+        if let cached = gifDataCache.object(forKey: key) {
+            return cached as Data
+        }
+        guard let client, let url = URL(string: gif.url) else { return nil }
+        do {
+            let data = try await client.fetchGIFData(from: url)
+            gifDataCache.setObject(data as NSData, forKey: key, cost: data.count)
+            return data
+        } catch {
+            return nil
+        }
+    }
+
     /// Puts `text` on the system pasteboard.
     private func setPasteboard(_ text: String) {
         #if canImport(AppKit)
