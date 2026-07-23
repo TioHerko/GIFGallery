@@ -6,15 +6,20 @@ public struct TagBar: View {
     @Bindable var viewModel: GalleryViewModel
     @AppStorage("tagBarExpanded") private var expanded = false
 
-    public init(viewModel: GalleryViewModel) {
+    /// Caps the height of the expanded bar; once the tags exceed it they
+    /// scroll instead of pushing the grid down. `nil` = unbounded (macOS).
+    private let maxExpandedHeight: CGFloat?
+
+    public init(viewModel: GalleryViewModel, maxExpandedHeight: CGFloat? = nil) {
         self.viewModel = viewModel
+        self.maxExpandedHeight = maxExpandedHeight
     }
 
     public var body: some View {
         HStack(alignment: .top, spacing: 6) {
             Group {
                 if expanded {
-                    FlowLayout(spacing: 6) { tagButtons }
+                    expandedTags
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) { tagButtons }
@@ -34,6 +39,22 @@ public struct TagBar: View {
                 .help(expanded ? "Show one line of tags" : "Show all tags")
                 .accessibilityLabel(expanded ? "Collapse tags" : "Expand tags")
             }
+        }
+    }
+
+    /// Wrapped tag chips. With a height cap, hug the content while it fits and
+    /// switch to a vertical scroller once it would overflow the cap.
+    @ViewBuilder private var expandedTags: some View {
+        if let maxExpandedHeight {
+            ViewThatFits(in: .vertical) {
+                FlowLayout(spacing: 6) { tagButtons }
+                ScrollView(.vertical) {
+                    FlowLayout(spacing: 6) { tagButtons }
+                }
+            }
+            .frame(maxHeight: maxExpandedHeight)
+        } else {
+            FlowLayout(spacing: 6) { tagButtons }
         }
     }
 

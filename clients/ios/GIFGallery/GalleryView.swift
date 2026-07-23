@@ -20,8 +20,11 @@ struct GalleryView: View {
 
     var body: some View {
         NavigationStack {
+          GeometryReader { proxy in
             VStack(spacing: 0) {
-                TagBar(viewModel: viewModel)
+                // Cap the expanded tag bar at half the available height so it
+                // can never crowd out the grid.
+                TagBar(viewModel: viewModel, maxExpandedHeight: proxy.size.height / 2)
                     .padding(.horizontal)
                     .padding(.top, 8)
 
@@ -68,6 +71,7 @@ struct GalleryView: View {
                     await Task { await viewModel.fetchGIFs() }.value
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .overlay(alignment: .bottom) {
                 if let msg = toastMessage {
                     Text(msg)
@@ -98,6 +102,7 @@ struct GalleryView: View {
             }
             .navigationTitle("GIF Lobster")
             .navigationBarTitleDisplayMode(.inline)
+          }
         }
         .task { await viewModel.fetchGIFs() }
         .sheet(isPresented: $showSettings, onDismiss: {
