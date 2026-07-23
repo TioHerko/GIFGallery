@@ -62,6 +62,9 @@ struct GalleryView: View {
                                     onRename: { viewModel.renamingGIF = gif },
                                     onDelete: { viewModel.deletingGIF = gif }
                                 )
+                                .gifHoverPreview(gif) {
+                                    await viewModel.loadFullGIFData(for: gif)
+                                }
                             }
                         }
                         .padding()
