@@ -37,11 +37,12 @@ struct GalleryView: View {
                         )
                     } else {
                         LazyVGrid(columns: columns, spacing: 8) {
-                            ForEach(viewModel.gifs) { gif in
+                            ForEach(viewModel.sortedGIFs) { gif in
                                 GIFGridItem(
                                     gif: gif,
                                     paused: viewModel.gifsPaused,
                                     gridSize: gridSize,
+                                    showsUsageCount: viewModel.sortOrder.showsUsageCount,
                                     loadData: { await viewModel.loadGIFData(for: gif) },
                                     onCopyEmbed: {
                                         viewModel.copyEmbedURL(gif)
@@ -96,6 +97,15 @@ struct GalleryView: View {
                             .onChange(of: viewModel.searchQuery) {
                                 viewModel.debouncedSearch()
                             }
+
+                        Picker("Sort", selection: $viewModel.sortOrder) {
+                            ForEach(GallerySort.allCases) { sort in
+                                Label(sort.label, systemImage: sort.systemImage).tag(sort)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .help("Sort GIFs")
 
                         Button { viewModel.showingUpload = true } label: {
                             Label("Upload", systemImage: "arrow.up.circle")

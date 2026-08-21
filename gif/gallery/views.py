@@ -13,6 +13,7 @@ from django.db import models, transaction
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_POST
 from django.db.models import F
+from django.db.models.functions import Lower
 import aiofiles
 from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.shortcuts import aget_object_or_404, redirect, render
@@ -33,6 +34,24 @@ from .video import (
 )
 
 GIF_MAGIC = (b"GIF87a", b"GIF89a")
+
+# Gallery sort strategies: ``?sort=`` value -> (label, order_by arguments).
+# Titles sort through Lower() because SQLite compares text binary, which would
+# file every capitalised title ahead of every lowercase one. The frequency
+# sorts need the created_at tiebreak — most GIFs share a copy_count of 0.
+# These keys double as the Swift clients' SortOrder raw values.
+GALLERY_SORTS = {
+    "newest": ("Newest first", ["-created_at"]),
+    "oldest": ("Oldest first", ["created_at"]),
+    "az": ("Title A\u2013Z", [Lower("title").asc(), "-created_at"]),
+    "za": ("Title Z\u2013A", [Lower("title").desc(), "-created_at"]),
+    "most_used": ("Most used", ["-copy_count", "-created_at"]),
+    "least_used": ("Least used", ["copy_count", "-created_at"]),
+}
+DEFAULT_SORT = "newest"
+# Sorts that rank by usage, and so have to show the counts they rank on.
+USAGE_COUNT_SORTS = frozenset({"most_used", "least_used"})
+SESSION_SORT_KEY = "gallery_sort"
 
 
 def _classify_upload(f):
@@ -175,11 +194,27 @@ def delete_token_view(request, token_id):
     return redirect("gallery:settings")
 
 
+async def _resolve_sort(request):
+    """The sort to apply: an explicit ``?sort=`` wins and is remembered for
+    later visits; otherwise fall back to the remembered one, then the default.
+    Unrecognised values are ignored rather than raising."""
+    requested = request.GET.get("sort")
+    if requested in GALLERY_SORTS:
+        # Session access in an async view has to go through the async API —
+        # the sync one hits the DB on the event loop.
+        if await request.session.aget(SESSION_SORT_KEY) != requested:
+            await request.session.aset(SESSION_SORT_KEY, requested)
+        return requested
+    remembered = await request.session.aget(SESSION_SORT_KEY)
+    return remembered if remembered in GALLERY_SORTS else DEFAULT_SORT
+
+
 @login_required
 async def gallery_view(request):
     user = await request.auser()
     tag_slug = request.GET.get("tag")
     query = request.GET.get("q", "").strip()
+    sort = await _resolve_sort(request)
     gifs = Gif.objects.prefetch_related("tags").filter(owner=user)
     active_tag = None
 
@@ -192,7 +227,7 @@ async def gallery_view(request):
             models.Q(title__icontains=query) | models.Q(tags__name__icontains=query)
         ).distinct()
 
-    gifs = [gif async for gif in gifs]
+    gifs = [gif async for gif in gifs.order_by(*GALLERY_SORTS[sort][1])]
     tags = [tag async for tag in Tag.objects.all()]
     return render(
         request,
@@ -202,6 +237,11 @@ async def gallery_view(request):
             "tags": tags,
             "active_tag": active_tag,
             "query": query,
+            "sort": sort,
+            "sort_options": [
+                (value, label) for value, (label, _) in GALLERY_SORTS.items()
+            ],
+            "show_counts": sort in USAGE_COUNT_SORTS,
         },
     )
 

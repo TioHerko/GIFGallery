@@ -55,6 +55,7 @@ export DEVELOPMENT_TEAM=XXXXXXXXXX
 - **Multi-user**: Each user owns their own GIFs via `Gif.owner` FK. Tags are shared globally. `gallery_view` and `api_list_gifs` filter by `owner=request.user`; GIF-serving endpoints (`/gif/<id>/`, `/thumb/<id>/`) are public (no auth).
 - **Nanoid IDs** (12-char) on `Gif` model instead of UUIDs — shorter URLs, uses `nanoid` library
 - **Tags**: simple `Tag` model with M2M, not django-taggit — avoids unnecessary dependency
+- **Sorting**: `gallery_view` accepts `?sort=` from the `GALLERY_SORTS` whitelist in `views.py` (`newest` — the default — `oldest`, `az`, `za`, `most_used`, `least_used`), remembers it in the session (async `session.aget`/`aset`), and ignores unknown values. Titles sort through `Lower()` since SQLite compares text binary; the usage sorts tiebreak on `-created_at`. Cards show `copy_count` only under `most_used`/`least_used`. The Swift clients re-sort the fetched list in `GalleryViewModel` via `GallerySort` (raw values match the server's keys), so sorting there costs no round trip and `/api/gifs/` needs no `?sort=`.
 - **Auth**: Django built-in `LoginView` + `/setup/` signup page. On first run (empty user table) `/login/` redirects to `/setup/`, which creates the first account as a superuser and logs in; subsequent signups via `/setup/` create regular users. No separate signup view. Extra superuser accounts via `manage.py createsuperuser`
 - **GIF serving** (`/gif/<id>/`): public (no auth), returns `Cache-Control: public, max-age=31536000, immutable`
 - **Production hardening is gated on `DJANGO_SECRET_KEY`**: setting it enables Secure cookies, HSTS, and `SECURE_PROXY_SSL_HEADER`; without it the app runs in dev mode with a public fallback key. The Docker container refuses to start without it.
@@ -71,7 +72,7 @@ export DEVELOPMENT_TEAM=XXXXXXXXXX
 
 | URL | Auth | Purpose |
 |-----|------|---------|
-| `/` | Yes | Gallery with tag filter and search (`?tag=`, `?q=`) |
+| `/` | Yes | Gallery with tag filter, search and sort (`?tag=`, `?q=`, `?sort=`) |
 | `/gif/<id>/` | No | Embed page (public, shows GIF + sharing links) |
 | `/gif/<id>.gif` | No | Serve GIF file (public, cached) |
 | `/thumb/<id>.gif` | No | Serve thumbnail (public, cached; falls back to full GIF) |
@@ -92,7 +93,7 @@ export DEVELOPMENT_TEAM=XXXXXXXXXX
 
 ## Data models
 
-- **Gif**: Nanoid PK, `owner` FK to User, `title`, `file` (FileField), `thumbnail` (FileField, optional), `tags` M2M to Tag, `copy_count`, `created_at`. Ordered by `-copy_count, -created_at`.
+- **Gif**: Nanoid PK, `owner` FK to User, `title`, `file` (FileField), `thumbnail` (FileField, optional), `tags` M2M to Tag, `copy_count`, `created_at`. Ordered by `-created_at` (newest first).
 - **Tag**: Auto-increment PK, `name` (unique), `slug` (unique). Ordered by `name`.
 - **APIToken**: Auto-increment PK, `user` FK, `name` (label), `token_hash` (SHA-256, unique), `created_at`. Raw token is never stored.
 
@@ -120,9 +121,12 @@ The `@login_required` decorator (sync) is used only on `gallery_view` (server-re
 
 The shared `GIFKit` package provides:
 - `APIClient`: All API calls (list, upload, rename, tag, delete, copy). Uses `URLSession` with a large persistent cache.
-- `GalleryViewModel`: `@Observable` view model shared by macOS and iOS apps.
+- `GalleryViewModel`: `@Observable` view model shared by macOS and iOS apps. Holds the `sortOrder` (persisted in the shared defaults suite) and exposes `sortedGIFs`; views iterate that, not `gifs`.
+- `GallerySort`: The six sort strategies, with raw values matching the server's `?sort=` keys. Sorting happens locally over the fetched list, so switching order needs no refetch. Named `GallerySort` because Foundation already has a `SortOrder`. `showsUsageCount` drives the count badge on `GIFGridItem`.
 - `KeychainStore`: Stores bearer token in the keychain (not UserDefaults). Supports app group sharing.
 - `SharedStore`: App group configuration (server URL, token). On macOS, derives the Team ID from the code signature at runtime.
 - `GIFIngest`: Validates GIF magic bytes on incoming share-sheet items before upload.
+
+`GIFKit` has a test target (`cd clients/GIFKit && swift test`), run in CI before the macOS build.
 
 The macOS app includes App Intents (Shortcuts): Find GIFs, Random GIF, Upload GIFs. The `GIFLobsterIntents.swift` file is duplicated between macOS and iOS (not shared via GIFKit) because App Intents metadata extraction requires the file to be in the app module.

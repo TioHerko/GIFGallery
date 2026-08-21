@@ -35,6 +35,7 @@ uv run python manage.py collectstatic    # for production
 - **Multi-user**: Each user owns their own GIFs via `Gif.owner` FK. Tags are shared globally. The `gallery_view` and `api_list_gifs` views filter by `owner=request.user`; GIF-serving endpoints (`/gif/<id>/`, `/thumb/<id>/`) are public (no auth).
 - **Nanoid IDs** (12-char) on `Gif` model instead of UUIDs — shorter URLs, uses `nanoid` library
 - **Tags**: simple `Tag` model with M2M, not django-taggit — avoids unnecessary dependency
+- **Sorting**: `Gif` defaults to `-created_at` (newest first). `gallery_view` accepts `?sort=` from the `GALLERY_SORTS` whitelist (`newest`, `oldest`, `az`, `za`, `most_used`, `least_used`) and remembers the choice in the session; unknown values fall back to newest. Titles sort through `Lower()` (SQLite compares text binary). Usage counts render on the cards only for the two `most_used`/`least_used` sorts. The Swift clients sort the fetched list locally via `GallerySort` (same keys), so `/api/gifs/` takes no `?sort=`.
 - **Auth**: Django built-in `LoginView` + `/setup/` signup page. On first run (empty user table) `/login/` redirects to `/setup/`, which creates the first account as a superuser and logs in; subsequent signups via `/setup/` create regular users. No separate signup view. Extra superuser accounts via `manage.py createsuperuser`
 - **GIF serving** (`/gif/<id>/`): public (no auth), returns `Cache-Control: public, max-age=31536000, immutable`
 - **Production hardening is gated on `DJANGO_SECRET_KEY`**: setting it enables Secure cookies, HSTS, and `SECURE_PROXY_SSL_HEADER`; without it the app runs in dev mode with a public fallback key. The Docker container refuses to start without it.
@@ -51,7 +52,7 @@ uv run python manage.py collectstatic    # for production
 
 | URL | Auth | Purpose |
 |-----|------|---------|
-| `/` | Yes | Gallery with tag filter and search (`?tag=`, `?q=`) |
+| `/` | Yes | Gallery with tag filter, search and sort (`?tag=`, `?q=`, `?sort=`) |
 | `/api/config/` | Yes | Upload limits (video max duration/width, max bytes, video extensions) as JSON — clients validate before uploading |
 | `/gif/<id>/` | No | Serve GIF file (public, cached) |
 | `/gif/<id>/tags/` | Yes | POST to update tags (JSON response) |

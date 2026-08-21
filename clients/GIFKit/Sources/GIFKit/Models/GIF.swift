@@ -11,6 +11,15 @@ public struct GIFItem: Codable, Identifiable, Sendable {
     public let createdAt: String
 
     public var displayUrl: String { thumbnailUrl ?? url }
+
+    /// `createdAt` parsed, or nil if the server sent something unexpected.
+    /// Django's isoformat() includes microseconds only when they're non-zero,
+    /// so both shapes arrive from the same server and both have to parse.
+    public var createdDate: Date? {
+        try? Date(createdAt, strategy: Self.timestampStyle)
+    }
+
+    private static let timestampStyle = Date.ISO8601FormatStyle()
 }
 
 public struct GIFListResponse: Codable {

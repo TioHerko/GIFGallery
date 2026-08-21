@@ -56,6 +56,19 @@
                 <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
             </svg>
         </button>
+        <!-- The chosen sort is remembered server-side, so tag links and search
+             don't need to carry it; this form only has to keep the current
+             filter while switching. -->
+        <form method="get" action="/" class="shrink-0">
+            {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag.slug }}">{% endif %}
+            {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+            <select name="sort" class="select select-sm select-bordered w-auto" onchange="this.form.submit()" title="Sort GIFs" aria-label="Sort GIFs">
+                {% for value, label in sort_options %}
+                <option value="{{ value }}"{% if value == sort %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <noscript><button type="submit" class="btn btn-sm">Sort</button></noscript>
+        </form>
     </div>
 
     <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
@@ -69,8 +82,11 @@
              data-rename-url="{% url 'gallery:rename_gif' gif.id %}"
              data-title="{{ gif.title }}"
              data-tags="{% for t in gif.tags.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
-            <figure class="cursor-pointer" onclick="copyRawUrl(this.closest('.gif-card'))">
+            <figure class="relative cursor-pointer" onclick="copyRawUrl(this.closest('.gif-card'))">
                 <img src="{% url 'gallery:serve_thumbnail' gif.id %}" alt="{{ gif.title }}" loading="lazy" class="w-full">
+                {% if show_counts %}
+                <span class="usage-count badge badge-sm absolute top-1 right-1" data-usage-count="{{ gif.copy_count }}" title="Times used">{{ gif.copy_count }}</span>
+                {% endif %}
             </figure>
             <div class="flex items-center gap-1 px-2 py-1.5">
                 <span class="gif-title text-xs opacity-70 truncate flex-1 cursor-pointer" onclick="openRenameEditor(this.closest('.gif-card'))" title="Click to rename">{{ gif.title }}</span>

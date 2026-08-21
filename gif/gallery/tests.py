@@ -2,14 +2,16 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from datetime import timedelta
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
+from django.utils import timezone
 from PIL import Image
 
-from .models import APIToken, Gif
+from .models import APIToken, Gif, Tag
 from .video import looks_like_video
 
 # Smallest valid GIF: 1x1 transparent pixel.
@@ -653,3 +655,113 @@ class VideoUploadTests(TestCase):
         with Image.open(gif.file.path) as im:
             self.assertEqual(im.width, 640)
             self.assertEqual(im.height, 360)
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA)
+class GallerySortTests(TestCase):
+    """Sort strategies on the gallery page, and the counts that go with them."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("sorter", password="pw")
+        self.client.force_login(self.user)
+        # Mixed case on purpose: SQLite orders binary, so a naive title sort
+        # would put "Banana" ahead of "apple".
+        self.make_gif("apple", days_ago=3, copies=5)
+        self.make_gif("Banana", days_ago=2, copies=0)
+        self.make_gif("cherry", days_ago=1, copies=2)
+
+    def make_gif(self, title, days_ago, copies):
+        gif = Gif.objects.create(
+            title=title,
+            owner=self.user,
+            copy_count=copies,
+            file=SimpleUploadedFile(f"{title}.gif", TINY_GIF),
+        )
+        # created_at is auto_now_add, so it can only be set after the fact.
+        Gif.objects.filter(pk=gif.pk).update(
+            created_at=timezone.now() - timedelta(days=days_ago)
+        )
+        return gif
+
+    def titles(self, query=""):
+        response = self.client.get(f"/{query}")
+        self.assertEqual(response.status_code, 200)
+        return [gif.title for gif in response.context["gifs"]]
+
+    def test_default_sort_is_newest_first(self):
+        self.assertEqual(self.titles(), ["cherry", "Banana", "apple"])
+
+    def test_model_default_ordering_is_newest_first(self):
+        self.assertEqual(
+            list(Gif.objects.values_list("title", flat=True)),
+            ["cherry", "Banana", "apple"],
+        )
+
+    def test_sort_oldest_first(self):
+        self.assertEqual(self.titles("?sort=oldest"), ["apple", "Banana", "cherry"])
+
+    def test_alphabetical_sort_ignores_case(self):
+        self.assertEqual(self.titles("?sort=az"), ["apple", "Banana", "cherry"])
+
+    def test_reverse_alphabetical_sort_ignores_case(self):
+        self.assertEqual(self.titles("?sort=za"), ["cherry", "Banana", "apple"])
+
+    def test_sort_by_most_used(self):
+        self.assertEqual(self.titles("?sort=most_used"), ["apple", "cherry", "Banana"])
+
+    def test_sort_by_least_used(self):
+        self.assertEqual(self.titles("?sort=least_used"), ["Banana", "cherry", "apple"])
+
+    def test_equally_used_gifs_are_ordered_newest_first(self):
+        self.make_gif("durian", days_ago=0, copies=5)
+        self.assertEqual(
+            self.titles("?sort=most_used")[:2], ["durian", "apple"]
+        )
+
+    def test_unknown_sort_falls_back_to_newest(self):
+        self.assertEqual(self.titles("?sort=bogus"), ["cherry", "Banana", "apple"])
+
+    def test_sort_choice_persists_across_requests(self):
+        self.titles("?sort=az")
+        self.assertEqual(self.titles(), ["apple", "Banana", "cherry"])
+
+    def test_unknown_sort_does_not_replace_remembered_choice(self):
+        self.titles("?sort=az")
+        self.assertEqual(self.titles("?sort=bogus"), ["apple", "Banana", "cherry"])
+
+    def test_sort_survives_tag_filtering(self):
+        tag = Tag.objects.create(name="Fruit", slug="fruit")
+        for gif in Gif.objects.all():
+            gif.tags.add(tag)
+        self.titles("?sort=az")
+        self.assertEqual(self.titles("?tag=fruit"), ["apple", "Banana", "cherry"])
+
+    def test_sort_applies_to_search_results(self):
+        # Searching joins tags and de-duplicates, and "apple" matches through
+        # two tags at once — so this is where ordering by Lower("title") has
+        # to survive .distinct().
+        apple = Gif.objects.get(title="apple")
+        for name in ("Apricot", "Avocado"):
+            apple.tags.add(Tag.objects.create(name=name, slug=name.lower()))
+        # "cherry" has no "a", so only two GIFs match.
+        self.assertEqual(self.titles("?q=a&sort=az"), ["apple", "Banana"])
+
+    def test_usage_counts_shown_when_sorting_by_most_used(self):
+        response = self.client.get("/?sort=most_used")
+        self.assertContains(response, "usage-count")
+
+    def test_usage_counts_shown_when_sorting_by_least_used(self):
+        response = self.client.get("/?sort=least_used")
+        # Zero is exactly what "least used" is ranking, so it must be shown.
+        self.assertContains(response, 'data-usage-count="0"')
+
+    def test_usage_counts_hidden_for_other_sorts(self):
+        for sort in ("newest", "oldest", "az", "za"):
+            with self.subTest(sort=sort):
+                response = self.client.get(f"/?sort={sort}")
+                self.assertNotContains(response, "usage-count")
+
+    def test_sort_control_offers_every_strategy(self):
+        response = self.client.get("/")
+        for value in ("newest", "oldest", "az", "za", "most_used", "least_used"):
+            with self.subTest(value=value):
+                self.assertContains(response, f'value="{value}"')

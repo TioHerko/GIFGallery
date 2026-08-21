@@ -22,6 +22,23 @@ public final class GalleryViewModel {
     }()
     public var searchQuery = ""
     public var selectedTag: String?
+
+    /// Where the sort preference lives — the app-group suite, so the app and
+    /// its share extension agree.
+    public static let sortDefaultsKey = "gallerySort"
+
+    /// Sorting runs over the already-fetched list, so changing it re-renders
+    /// immediately instead of refetching. Persisted so the choice survives a
+    /// relaunch, the way the server remembers it for the web gallery.
+    public var sortOrder: GallerySort {
+        didSet {
+            guard sortOrder != oldValue else { return }
+            SharedStore.defaults.set(sortOrder.rawValue, forKey: Self.sortDefaultsKey)
+        }
+    }
+
+    /// The GIFs to display, in the chosen order.
+    public var sortedGIFs: [GIFItem] { sortOrder.sorted(gifs) }
     public var availableTags: [Tag] = []
     public var isLoading = false
     public var errorMessage: String?
@@ -41,7 +58,10 @@ public final class GalleryViewModel {
 
     public static let autoPauseDelay: Duration = .seconds(15)
 
-    public init() {}
+    public init() {
+        let stored = SharedStore.defaults.string(forKey: Self.sortDefaultsKey)
+        sortOrder = stored.flatMap(GallerySort.init(rawValue:)) ?? .default
+    }
 
     private var client: APIClient? {
         SharedStore.makeClient()

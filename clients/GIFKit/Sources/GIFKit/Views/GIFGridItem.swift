@@ -4,6 +4,9 @@ public struct GIFGridItem: View {
     public let gif: GIFItem
     public let paused: Bool
     public let gridSize: GridSize
+    /// Only the usage-ranked sorts show the count, so the number always
+    /// explains the order the cells are in.
+    public let showsUsageCount: Bool
     public let loadData: () async -> Data?
     public let onCopyEmbed: () -> Void
     public let onCopyRaw: () -> Void
@@ -20,6 +23,7 @@ public struct GIFGridItem: View {
         gif: GIFItem,
         paused: Bool,
         gridSize: GridSize,
+        showsUsageCount: Bool = false,
         loadData: @escaping () async -> Data?,
         onCopyEmbed: @escaping () -> Void,
         onCopyRaw: @escaping () -> Void,
@@ -32,6 +36,7 @@ public struct GIFGridItem: View {
         self.loadData = loadData
         self.paused = paused
         self.gridSize = gridSize
+        self.showsUsageCount = showsUsageCount
         self.onCopyEmbed = onCopyEmbed
         self.onCopyRaw = onCopyRaw
         self.onSendToDiscord = onSendToDiscord
@@ -73,15 +78,19 @@ public struct GIFGridItem: View {
                 .frame(height: gridSize.mediaHeight)
                 .clipped()
 
-                // Don't like the copy count
-//                if gif.copyCount > 0 {
-//                    Text("\(gif.copyCount)")
-//                        .font(.caption2.weight(.medium))
-//                        .padding(.horizontal, 5)
-//                        .padding(.vertical, 2)
-//                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4))
-//                        .padding(6)
-//                }
+                // Shown for the usage sorts only — including a count of 0,
+                // which is exactly what "least used" ranks on.
+                if showsUsageCount {
+                    Text("\(gif.copyCount)")
+                        .font(.caption2.weight(.medium))
+                        .monospacedDigit()
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4))
+                        .padding(6)
+                        .help("Used \(gif.copyCount) times")
+                        .accessibilityLabel("Used \(gif.copyCount) times")
+                }
             }
 
             HStack(spacing: 4) {

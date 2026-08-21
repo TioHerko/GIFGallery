@@ -12,5 +12,10 @@ let package = Package(
             name: "GIFKit",
             path: "Sources/GIFKit"
         ),
+        .testTarget(
+            name: "GIFKitTests",
+            dependencies: ["GIFKit"],
+            path: "Tests/GIFKitTests"
+        ),
     ]
 )
