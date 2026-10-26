@@ -25,7 +25,12 @@ from django.core.files.base import ContentFile
 
 from .auth import auth_required
 from .models import APIToken, Gif, Tag
-from .thumbnails import generate_thumbnail_bytes, optimize_in_place, thumbnail_filename
+from .thumbnails import (
+    generate_thumbnail_bytes,
+    gif_limit_error,
+    optimize_in_place,
+    thumbnail_filename,
+)
 from .video import (
     VIDEO_EXTENSIONS,
     VideoConversionError,
@@ -34,6 +39,9 @@ from .video import (
 )
 
 GIF_MAGIC = (b"GIF87a", b"GIF89a")
+GIF_TITLE_MAX = Gif._meta.get_field("title").max_length
+TAG_NAME_MAX = Tag._meta.get_field("name").max_length
+TAG_SLUG_MAX = Tag._meta.get_field("slug").max_length
 
 # Gallery sort strategies: ``?sort=`` value -> (label, order_by arguments).
 # Titles sort through Lower() because SQLite compares text binary, which would
@@ -67,6 +75,9 @@ def _classify_upload(f):
     header = f.read(12)
     f.seek(0)
     if header[:6] in GIF_MAGIC:
+        limit_error = gif_limit_error(f)
+        if limit_error:
+            return None, f"{f.name}: {limit_error}"
         return "gif", None
     if looks_like_video(header):
         return "video", None
@@ -112,10 +123,30 @@ def setup_view(request):
 TOKEN_DESCRIPTION_MAX = APIToken._meta.get_field("name").max_length
 
 
-def _render_settings(request, password_form=None, create_user_form=None):
-    # Raw tokens are only stored hashed, so a freshly created one is stashed
-    # in the session by create_token_view and shown exactly once here.
-    new_token = request.session.pop("new_api_token", None)
+async def _get_or_create_tag(name):
+    """Resolve a tag by name, creating a unique, non-empty slug if needed."""
+    name = name.strip()[:TAG_NAME_MAX]
+    if not name:
+        return None
+
+    existing = await Tag.objects.filter(name=name).afirst()
+    if existing is not None:
+        return existing
+
+    base = slugify(name)[:TAG_SLUG_MAX] or "tag"
+    slug = base
+    suffix = 2
+    while await Tag.objects.filter(slug=slug).aexists():
+        suffix_text = f"-{suffix}"
+        slug = f"{base[: TAG_SLUG_MAX - len(suffix_text)]}{suffix_text}"
+        suffix += 1
+    tag, _ = await Tag.objects.aget_or_create(slug=slug, defaults={"name": name})
+    return tag
+
+
+def _render_settings(
+    request, password_form=None, create_user_form=None, new_token=None
+):
     return render(
         request,
         "gallery/settings.html",
@@ -141,6 +172,10 @@ def change_password_view(request):
     form = PasswordChangeForm(request.user, request.POST)
     if form.is_valid():
         user = form.save()
+        # Rotating the password should also invalidate long-lived API tokens.
+        if user.api_tokens.exists():
+            user.api_tokens.all().delete()
+            messages.info(request, "All API tokens were revoked.")
         # Password changes rotate the session auth hash; without this the
         # current session would be logged out immediately.
         update_session_auth_hash(request, user)
@@ -163,11 +198,12 @@ def create_token_view(request):
         )
         return redirect("gallery:settings")
     _, raw_token = APIToken.create_token(request.user, name=description)
-    request.session["new_api_token"] = {
-        "token": raw_token,
-        "description": description,
-    }
-    return redirect("gallery:settings")
+    # Render the raw token in this response instead of stashing it in the
+    # session (which would persist it server-side until the page was loaded).
+    return _render_settings(
+        request,
+        new_token={"token": raw_token, "description": description},
+    )
 
 
 @login_required
@@ -311,12 +347,8 @@ async def tag_gif_view(request, gif_id):
     tag_names = request.POST.get("tags", "")
     tags = []
     for name in tag_names.split(","):
-        name = name.strip()
-        if name:
-            tag, _ = await Tag.objects.aget_or_create(
-                slug=slugify(name),
-                defaults={"name": name},
-            )
+        tag = await _get_or_create_tag(name)
+        if tag is not None:
             tags.append(tag)
     await gif.tags.aset(tags)
     return JsonResponse({
@@ -329,7 +361,7 @@ async def rename_gif_view(request, gif_id):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
     gif = await aget_object_or_404(Gif, id=gif_id, owner=request.user)
-    title = request.POST.get("title", "").strip()
+    title = request.POST.get("title", "").strip()[:GIF_TITLE_MAX]
     if not title:
         return JsonResponse({"error": "Title is required"}, status=400)
     gif.title = title
@@ -383,6 +415,7 @@ async def upload_view(request):
             # Strip file extension from title
             if "." in title:
                 title = title.rsplit(".", 1)[0]
+            title = title[:GIF_TITLE_MAX]
             if kind == "video":
                 try:
                     gif_bytes = await sync_to_async(
@@ -401,12 +434,8 @@ async def upload_view(request):
         # Parse and create tags
         tags = []
         for name in tag_names.split(","):
-            name = name.strip()
-            if name:
-                tag, _ = await Tag.objects.aget_or_create(
-                    slug=slugify(name),
-                    defaults={"name": name},
-                )
+            tag = await _get_or_create_tag(name)
+            if tag is not None:
                 tags.append(tag)
 
         created = []
@@ -455,6 +484,8 @@ async def api_config(request):
         "video_max_duration_seconds": settings.VIDEO_MAX_DURATION_SECONDS,
         "video_max_width": settings.VIDEO_MAX_WIDTH,
         "max_upload_bytes": settings.GIF_MAX_UPLOAD_BYTES,
+        "gif_max_pixels": settings.GIF_MAX_PIXELS,
+        "gif_max_frames": settings.GIF_MAX_FRAMES,
         "video_extensions": [ext.lstrip(".") for ext in VIDEO_EXTENSIONS],
     })
 

@@ -1,0 +1,4 @@
+[virtualenvs]
+# Keep the venv at ./.venv (matches .gitignore, the Dockerfile PATH and
+# gif.service.example).
+in-project = true

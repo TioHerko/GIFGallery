@@ -7,7 +7,10 @@
     </div>
     <div class="flex-none gap-2">
         <a href="/" class="btn btn-sm btn-ghost rounded-btn">Gallery</a>
-        <a href="{% url 'logout' %}" class="btn btn-sm btn-ghost rounded-btn">Logout</a>
+        <form method="post" action="{% url 'logout' %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-ghost rounded-btn">Logout</button>
+        </form>
     </div>
 </div>
 
@@ -100,6 +103,7 @@
                     <tr>
                         <th>Description</th>
                         <th>Created</th>
+                        <th>Expires</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -108,6 +112,9 @@
                     <tr>
                         <td class="break-all">{{ token.name }}</td>
                         <td class="whitespace-nowrap opacity-70">{{ token.created_at|date:"Y-m-d H:i" }}</td>
+                        <td class="whitespace-nowrap opacity-70">
+                            {% if token.expires_at %}{{ token.expires_at|date:"Y-m-d" }}{% else %}Never{% endif %}
+                        </td>
                         <td class="text-right">
                             <form method="post" action="{% url 'gallery:delete_token' token.id %}"
                                   onsubmit="return confirm('Delete token “{{ token.name|escapejs }}”? Clients using it will stop working.')">

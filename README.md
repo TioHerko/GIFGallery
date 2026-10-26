@@ -6,7 +6,7 @@ This repository contains a Django application to run on a Linux/UNIX-y system. I
 
 The Django application requires:
 
-- uv
+- Poetry
 - nginx, Apache, or Caddy to front it
 
 I also put a free Cloudflare account in front of it, for proxying and responsiveness.
@@ -69,21 +69,33 @@ docker exec -it gif python gif/manage.py createsuperuser
 
 The image is configured through environment variables:
 
-| Variable                      | Default                  | Purpose                                                                                                                                                       |
-| ----------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DJANGO_SECRET_KEY`           | _(required)_             | Django secret key — the container refuses to start without one. Setting it also enables the HTTPS hardening (Secure cookies, HSTS, `X-Forwarded-Proto` trust) |
-| `DJANGO_DEBUG`                | `False`                  | Enable debug mode (`true`/`false`)                                                                                                                            |
-| `DJANGO_ALLOWED_HOSTS`        | `gif.herko.me,127.0.0.1` | Comma-separated allowed hostnames                                                                                                                             |
-| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://gif.herko.me`   | Comma-separated trusted origins for CSRF                                                                                                                      |
-| `DJANGO_DB_PATH`              | `/data/db.sqlite3`       | Path to the SQLite database file                                                                                                                              |
-| `DJANGO_MEDIA_ROOT`           | `/data/media`            | Directory for uploaded GIFs                                                                                                                                   |
-| `GIF_MAX_UPLOAD_BYTES`        | `52428800` (50 MB)       | Per-file upload size limit                                                                                                                                    |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DJANGO_SECRET_KEY` | _(required)_ | Django secret key, at least 50 characters. The container refuses to start without one, and setting it enables the HTTPS hardening (Secure cookies, HSTS, `X-Forwarded-Proto` trust, SSL redirect) |
+| `DJANGO_DEBUG` | `False` | Enable debug mode (`true`/`false`) |
+| `DJANGO_ALLOWED_HOSTS` | `gif.herko.me,127.0.0.1` | Comma-separated allowed hostnames |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://gif.herko.me` | Comma-separated trusted origins for CSRF |
+| `DJANGO_DB_PATH` | `/data/db.sqlite3` | Path to the SQLite database file |
+| `DJANGO_MEDIA_ROOT` | `/data/media` | Directory for uploaded GIFs |
+| `DJANGO_SECURE_SSL_REDIRECT` | `True` in production | Redirect HTTP to HTTPS. Disable only for direct plain-HTTP access |
+| `DJANGO_TRUST_PROXY_HEADERS` | `True` in production | Trust `CF-Connecting-IP`/`X-Real-IP`/`X-Forwarded-For` for throttling. Disable if the app is reachable directly |
+| `DJANGO_CONTENT_SECURITY_POLICY` | built-in policy | Override the CSP header; set to an empty string to disable |
+| `GIF_MAX_UPLOAD_BYTES` | `52428800` (50 MB) | Per-file upload size limit |
+| `GIF_MAX_PIXELS` | `25000000` | Maximum decoded GIF canvas (width × height) |
+| `GIF_MAX_FRAMES` | `500` | Maximum decoded GIF frame count |
+| `API_TOKEN_TTL_DAYS` | `365` | API token lifetime; `0` disables expiry |
+| `LOGIN_THROTTLE_USER_ATTEMPTS` | `5` | Failed sign-ins per username per window |
+| `LOGIN_THROTTLE_IP_ATTEMPTS` | `20` | Failed sign-ins per client IP per window |
+| `LOGIN_THROTTLE_WINDOW_SECONDS` | `900` | Throttle window in seconds |
 
 ### Fronting it
 
 The container serves plain HTTP on port 8000 — **always put a TLS-terminating
 reverse proxy (nginx/Caddy/Cloudflare) in front of it** and have it forward
-`X-Forwarded-Proto`; see `nginx.conf.example`. The proxy should also cap
+`X-Forwarded-Proto`; see `nginx.conf.example`. Production redirects HTTP to
+HTTPS by default, so the proxy must forward `X-Forwarded-Proto` or requests
+will loop. The app throttles failed sign-ins per worker; a shared cache backend
+is needed for exact cross-worker limits. The proxy should also cap
 request body size (nginx: `client_max_body_size 50m`). Static assets are
 collected into the image at build time. Don't configure the proxy to serve the
 `/data/media` directory directly: uploads keep their original filename, and a

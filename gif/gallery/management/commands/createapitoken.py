@@ -23,6 +23,10 @@ class Command(BaseCommand):
 
         token, raw_token = APIToken.create_token(user, name=options["name"])
         self.stdout.write(f"\nToken created: {raw_token}\n")
+        if token.expires_at:
+            self.stdout.write(f"Expires: {token.expires_at.isoformat()}\n")
+        else:
+            self.stdout.write("Expires: never\n")
         self.stdout.write(
             self.style.WARNING("Save this token now — it cannot be retrieved later.\n")
         )
