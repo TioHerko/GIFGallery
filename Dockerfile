@@ -2,20 +2,22 @@
 
 # GIF Gallery — Django application container.
 #
-# Uses the official uv image (Python 3.14) to install dependencies from the
-# locked pyproject/uv.lock, collects static files, and serves the app over
-# ASGI with uvicorn. Persistent data (SQLite DB + uploaded GIFs) is expected
-# on a mounted volume via DJANGO_DB_PATH / DJANGO_MEDIA_ROOT.
+# Uses the official Python 3.14 image, installs dependencies with Poetry from
+# the locked pyproject/poetry.lock, collects static files, and serves the app
+# over ASGI with uvicorn. Persistent data (SQLite DB + uploaded GIFs) is
+# expected on a mounted volume via DJANGO_DB_PATH / DJANGO_MEDIA_ROOT.
 
-FROM ghcr.io/astral-sh/uv:python3.14-trixie-slim
+FROM python:3.14-slim-trixie
 
-# uv/runtime environment:
-#  - compile bytecode for faster startup
-#  - copy (don't symlink) packages so the venv is self-contained
-#  - keep the venv on PATH so `uvicorn`/`python` resolve without `uv run`
+# Poetry/runtime environment:
+#  - Poetry lives in its own venv under /opt/poetry, separate from the app
+#  - the app venv is created in-project at /app/.venv
+#  - keep the venv on PATH so `uvicorn`/`python` resolve without `poetry run`
 #  - never buffer stdout/stderr so container logs appear immediately
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
+ENV POETRY_HOME=/opt/poetry \
+    POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_CACHE_DIR=/root/.cache/pypoetry \
     PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
@@ -23,21 +25,28 @@ WORKDIR /app
 
 RUN apt update && apt -y install gifsicle ffmpeg && apt -y dist-upgrade
 
-# Install dependencies first (without the project source) so this layer is
-# cached and only rebuilt when the lockfile changes.
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev
+# Install Poetry into an isolated venv so its own dependencies never mix with
+# the app's. Pinned to the version the lockfile was generated with.
+RUN python -m venv "$POETRY_HOME" \
+    && "$POETRY_HOME/bin/pip" install --no-cache-dir poetry==2.4.1
 
-# Copy the application source and install the project itself.
+# Install dependencies from the lockfile before copying the source so this
+# layer is cached and only rebuilt when the lockfile changes. Poetry refuses
+# to install from a lockfile that is out of date with pyproject.toml, so a
+# stale lock fails the build rather than silently re-resolving. --compile
+# precompiles bytecode for faster startup. The project itself is never
+# installed (package-mode = false), so no second install step is needed.
+RUN --mount=type=cache,target=/root/.cache/pypoetry \
+    --mount=type=bind,source=poetry.lock,target=poetry.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    "$POETRY_HOME/bin/poetry" install --only main --compile
+
+# Copy the application source.
 COPY . /app
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
 
 # Collect static assets into STATIC_ROOT (gif/staticfiles). A throwaway
 # SECRET_KEY is fine here — collectstatic touches no secrets.
-RUN DJANGO_SECRET_KEY=build-only \
+RUN DJANGO_SECRET_KEY=build-only-not-a-real-secret-0123456789abcdefghijklmnop \
     python gif/manage.py collectstatic --noinput
 
 # Persistent data lives here by default; mount a volume to keep it.

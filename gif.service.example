@@ -3,7 +3,7 @@
 # Assumes:
 #   - App deployed to /srv/gif/ with a venv at /srv/gif/.venv/
 #   - A dedicated 'gif' user/group owns /srv/gif/
-#   - uvicorn installed in the venv (uv add uvicorn[standard])
+#   - uvicorn installed in the venv (poetry add "uvicorn[standard]")
 #   - Socket path matches nginx.conf.example upstream
 #
 # To use:
@@ -30,6 +30,10 @@ RuntimeDirectory=gif
 # the app's HTTPS hardening (Secure cookies, HSTS, X-Forwarded-Proto trust).
 # Keep it out of this unit file — unit files are world-readable.
 EnvironmentFile=/etc/gif/env
+
+# Refuse to start with the public development key (settings.py raises on a
+# missing or short key, but fail early with a clear error here too).
+ExecStartPre=/bin/sh -c 'test -n "$DJANGO_SECRET_KEY"'
 
 ExecStart=/srv/gif/.venv/bin/uvicorn gif.asgi:application \
     --uds /run/gif/uvicorn.sock \

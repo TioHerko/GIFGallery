@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -23,6 +25,14 @@ def _env_list(name, default):
     if value is None:
         return default
     return [item.strip() for item in value.split(',') if item.strip()]
+
+
+def _env_bool(name, default):
+    """Read a boolean environment variable."""
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 # Quick-start development settings - unsuitable for production
@@ -40,9 +50,19 @@ if not IS_PRODUCTION:
     # Development only. This key is public (it lives in the repo) — never
     # deploy with it.
     SECRET_KEY = 'django-insecure-ubcb0qaiqyb)r1629@)ch5_n^f7o!k4yfba_$a%6d9!$dz4cp1'
+elif (
+    len(SECRET_KEY) < 50
+    or len(set(SECRET_KEY)) < 5
+    or SECRET_KEY.startswith('django-insecure-')
+):
+    raise ImproperlyConfigured(
+        'DJANGO_SECRET_KEY must be at least 50 characters, use at least 5 '
+        "distinct characters, and must not use Django's insecure development "
+        'prefix.'
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('1', 'true', 'yes')
+DEBUG = _env_bool('DJANGO_DEBUG', False)
 
 ALLOWED_HOSTS = _env_list('DJANGO_ALLOWED_HOSTS', ['gif.herko.me', '127.0.0.1'])
 
@@ -59,11 +79,41 @@ if IS_PRODUCTION:
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = _env_bool('DJANGO_SECURE_HSTS_PRELOAD', True)
+    # The documented deployment always puts a TLS-terminating proxy in front,
+    # so redirect HTTP requests unless the operator opts out (e.g. direct
+    # plain-HTTP access on a trusted network).
+    SECURE_SSL_REDIRECT = _env_bool('DJANGO_SECURE_SSL_REDIRECT', True)
+
+# Content-Security-Policy sent on every response. Inline handlers and the
+# Tailwind browser runtime require 'unsafe-inline'/'unsafe-eval', so this is
+# defense-in-depth (it still blocks scripts and styles from other origins).
+# Set DJANGO_CONTENT_SECURITY_POLICY='' to disable.
+CONTENT_SECURITY_POLICY = os.environ.get(
+    'DJANGO_CONTENT_SECURITY_POLICY',
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "img-src 'self' data: blob:; "
+    "media-src 'self' blob:; "
+    "font-src 'self' https://cdn.jsdelivr.net; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "frame-ancestors 'none'; "
+    "form-action 'self'",
+)
 
 # Per-file upload cap, enforced in the upload views. nginx applies the same
 # limit to the whole request body (client_max_body_size); this keeps a
 # proxyless deployment (e.g. the bare Docker container) capped too.
 GIF_MAX_UPLOAD_BYTES = int(os.environ.get('GIF_MAX_UPLOAD_BYTES', 50 * 1024 * 1024))
+
+# Decoded GIF limits. The byte cap above does not stop a tiny file from
+# declaring a huge canvas or thousands of frames, which would make thumbnail
+# generation (and browsers) allocate/process far more than the upload size.
+GIF_MAX_PIXELS = int(os.environ.get('GIF_MAX_PIXELS', 25_000_000))
+GIF_MAX_FRAMES = int(os.environ.get('GIF_MAX_FRAMES', 500))
 
 # Video uploads (mp4/mov/mkv) are transcoded to GIF with ffmpeg, preserving the
 # source framerate and downscaling to at most VIDEO_MAX_WIDTH px wide (aspect
@@ -74,6 +124,20 @@ GIF_MAX_UPLOAD_BYTES = int(os.environ.get('GIF_MAX_UPLOAD_BYTES', 50 * 1024 * 10
 VIDEO_MAX_DURATION_SECONDS = int(os.environ.get('VIDEO_MAX_DURATION_SECONDS', 10))
 VIDEO_MAX_WIDTH = int(os.environ.get('VIDEO_MAX_WIDTH', 640))
 FFMPEG_TIMEOUT_SECONDS = int(os.environ.get('FFMPEG_TIMEOUT_SECONDS', 120))
+
+# Sign-in throttling (cache-backed, per process). Limits are per username and
+# per client IP over a rolling window; a successful sign-in clears both.
+LOGIN_THROTTLE_USER_ATTEMPTS = int(os.environ.get('LOGIN_THROTTLE_USER_ATTEMPTS', 5))
+LOGIN_THROTTLE_IP_ATTEMPTS = int(os.environ.get('LOGIN_THROTTLE_IP_ATTEMPTS', 20))
+LOGIN_THROTTLE_WINDOW_SECONDS = int(os.environ.get('LOGIN_THROTTLE_WINDOW_SECONDS', 900))
+# Behind the documented reverse proxy, use its client-IP headers. Never trust
+# these when the app is reachable directly: clients can forge them.
+LOGIN_THROTTLE_TRUST_PROXY = _env_bool(
+    'DJANGO_TRUST_PROXY_HEADERS', IS_PRODUCTION
+)
+
+# API tokens expire after this many days. Set to 0 to disable expiry.
+API_TOKEN_TTL_DAYS = int(os.environ.get('API_TOKEN_TTL_DAYS', 365))
 
 
 # Application definition
@@ -92,11 +156,13 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'gallery.throttle.LoginThrottleMiddleware',
     'gallery.auth.bearer_csrf_exempt_middleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'gallery.security.ContentSecurityPolicyMiddleware',
 ]
 
 ROOT_URLCONF = 'gif.urls'

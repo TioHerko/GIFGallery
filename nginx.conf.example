@@ -20,7 +20,9 @@ upstream gif_app {
 }
 
 # Throttle login attempts (this file is included inside the http {} block,
-# so the zone can be declared here). 5 requests/minute per client IP.
+# so the zone can be declared here). 5 requests/minute per client IP. The app
+# also throttles failed sign-ins itself; this is a coarser first line of
+# defense for /login/, /admin/login/, and /setup/.
 limit_req_zone $binary_remote_addr zone=gif_login:10m rate=5r/m;
 
 # Redirect HTTP to HTTPS
@@ -62,8 +64,28 @@ server {
     # forced image/gif content type and nosniff instead; nothing links to
     # /media/ URLs.
 
-    # --- Login (rate-limited) ---
+    # --- Login and first-run setup (rate-limited) ---
     location = /login/ {
+        limit_req zone=gif_login burst=5 nodelay;
+        proxy_pass http://gif_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+    }
+
+    location = /admin/login/ {
+        limit_req zone=gif_login burst=5 nodelay;
+        proxy_pass http://gif_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+    }
+
+    location = /setup/ {
         limit_req zone=gif_login burst=5 nodelay;
         proxy_pass http://gif_app;
         proxy_set_header Host $host;

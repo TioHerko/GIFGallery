@@ -6,7 +6,7 @@ Multi-user Django app for hosting, tagging, and sharing GIFs.
 
 ```
 gif/                    # repo root
-  pyproject.toml        # uv-managed, deps: django, nanoid, uvicorn, aiofiles, pillow
+  pyproject.toml        # Poetry-managed, deps: django, nanoid, uvicorn, aiofiles, pillow
   Dockerfile            # production container (uvicorn + SQLite on /data volume)
   nginx.conf.example    # production nginx template
   gif/                  # Django root (contains manage.py)
@@ -28,12 +28,12 @@ gif/                    # repo root
 All commands run from `gif/gif/` (the directory with `manage.py`):
 
 ```bash
-uv run uvicorn gif.asgi:application --reload  # dev server (ASGI)
-uv run python manage.py test                  # run tests
-uv run python manage.py makemigrations        # after model changes
-uv run python manage.py migrate               # apply migrations
-uv run python manage.py createsuperuser       # create extra superuser accounts
-uv run python manage.py collectstatic         # for production
+poetry run uvicorn gif.asgi:application --reload  # dev server (ASGI)
+poetry run python manage.py test                  # run tests
+poetry run python manage.py makemigrations        # after model changes
+poetry run python manage.py migrate               # apply migrations
+poetry run python manage.py createsuperuser       # create extra superuser accounts
+poetry run python manage.py collectstatic         # for production
 ```
 
 Swift client build commands (from `clients/macos/`):

@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
@@ -88,6 +89,20 @@ class UploadValidationTests(TestCase):
         response = self.upload("big.gif", TINY_GIF)
         self.assertEqual(response.status_code, 400)
         self.assertIn("larger than", response.json()["errors"][0])
+        self.assertEqual(Gif.objects.count(), 0)
+
+    @override_settings(GIF_MAX_PIXELS=0)
+    def test_pixel_limit_rejected(self):
+        response = self.upload("wide.gif", TINY_GIF)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("pixels", response.json()["errors"][0])
+        self.assertEqual(Gif.objects.count(), 0)
+
+    @override_settings(GIF_MAX_FRAMES=0)
+    def test_frame_limit_rejected(self):
+        response = self.upload("animated.gif", TINY_GIF)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("frames", response.json()["errors"][0])
         self.assertEqual(Gif.objects.count(), 0)
 
     def test_unauthenticated_upload_rejected(self):
@@ -234,16 +249,31 @@ class UserIsolationTests(TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_tagging_creates_unique_non_empty_slugs(self):
+        from .models import Tag
+
+        client = Client()
+        client.force_login(self.alice)
+        response = client.post(
+            f"/gif/{self.alice_gif.id}/tags/",
+            {"tags": "!!!, C++, C"},
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+        self.assertEqual(response.status_code, 200)
+        slugs = [t["slug"] for t in response.json()["tags"]]
+        self.assertTrue(all(slugs))
+        self.assertEqual(len(slugs), len(set(slugs)))
+        self.assertEqual(Tag.objects.count(), 3)
+
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA)
 class BearerAuthCsrfTests(TestCase):
-    """The CSRF exemption for bearer requests must apply only when the
-    token actually validates — an invalid token must never lift CSRF for a
-    request that falls through to session authentication."""
+    """Bearer requests may skip CSRF only on the API endpoints that validate
+    the token themselves; session-authenticated HTML views stay protected."""
 
     def setUp(self):
         self.user = User.objects.create_user("u", password="pw")
-        _, self.raw_token = APIToken.create_token(self.user)
+        self.token, self.raw_token = APIToken.create_token(self.user)
         self.gif = Gif.objects.create(
             title="t", owner=self.user,
             file=SimpleUploadedFile("t.gif", TINY_GIF),
@@ -279,6 +309,67 @@ class BearerAuthCsrfTests(TestCase):
         self.csrf_client.force_login(self.user)
         response = self.rename()
         self.assertEqual(response.status_code, 403)
+
+    def test_bearer_header_does_not_exempt_session_views(self):
+        # The exemption is scoped to the async API endpoints. A garbage
+        # Bearer header must not turn an authenticated session POST to a
+        # settings view into a CSRF-exempt request.
+        self.csrf_client.force_login(self.user)
+        response = self.csrf_client.post(
+            "/settings/tokens/create/",
+            {"description": "csrf probe"},
+            headers={"authorization": "Bearer garbage"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(APIToken.objects.filter(name="csrf probe").exists())
+
+    def test_expired_token_is_rejected(self):
+        APIToken.objects.filter(pk=self.token.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        response = self.rename(
+            headers={"authorization": f"Bearer {self.raw_token}"}
+        )
+        self.assertEqual(response.status_code, 401)
+        self.gif.refresh_from_db()
+        self.assertEqual(self.gif.title, "t")
+
+
+class LoginThrottleTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user("u", password="pw")
+
+    def login(self, password):
+        return self.client.post(
+            "/login/", {"username": "u", "password": password}
+        )
+
+    @override_settings(
+        LOGIN_THROTTLE_USER_ATTEMPTS=2, LOGIN_THROTTLE_IP_ATTEMPTS=100
+    )
+    def test_repeated_failures_are_throttled(self):
+        self.assertEqual(self.login("wrong").status_code, 200)
+        self.assertEqual(self.login("wrong").status_code, 200)
+        response = self.login("wrong")
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("Retry-After", response)
+
+    @override_settings(
+        LOGIN_THROTTLE_USER_ATTEMPTS=2, LOGIN_THROTTLE_IP_ATTEMPTS=100
+    )
+    def test_successful_login_clears_failures(self):
+        self.login("wrong")
+        self.assertEqual(self.login("pw").status_code, 302)
+        self.assertEqual(self.login("wrong").status_code, 200)
+        self.assertEqual(self.login("wrong").status_code, 200)
+        self.assertEqual(self.login("wrong").status_code, 429)
+
+
+class SecurityHeaderTests(TestCase):
+    def test_csp_header_present(self):
+        response = self.client.get("/setup/")
+        self.assertIn("default-src 'self'", response["Content-Security-Policy"])
 
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA)
@@ -446,6 +537,21 @@ class SettingsPageTests(TestCase):
         response = self.client.get("/settings/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "my laptop")
+
+    def test_change_password_revokes_api_tokens(self):
+        _, raw = APIToken.create_token(self.user, name="phone")
+        response = self.client.post(
+            "/settings/password/",
+            {
+                "old_password": "old-horse-battery",
+                "new_password1": "new-horse-battery",
+                "new_password2": "new-horse-battery",
+            },
+        )
+        self.assertRedirects(response, "/settings/")
+        self.assertFalse(APIToken.objects.filter(user=self.user).exists())
+        api = Client(headers={"Authorization": f"Bearer {raw}"})
+        self.assertEqual(api.get("/api/gifs/").status_code, 401)
 
     def test_change_password(self):
         response = self.client.post(

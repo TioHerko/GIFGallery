@@ -23,6 +23,19 @@ _EBML_MAGIC = b"\x1a\x45\xdf\xa3"
 
 VIDEO_EXTENSIONS = (".mp4", ".mov", ".mkv", ".m4v", ".webm")
 
+# Force the demuxer from the (whitelisted) extension instead of letting ffmpeg
+# auto-detect arbitrary container formats, and restrict the protocols a
+# container may reference. Without this, a crafted upload could make ffmpeg
+# fetch remote URLs (SSRF) or read local files.
+_DEMUXERS = {
+    ".mp4": "mov",
+    ".m4v": "mov",
+    ".mov": "mov",
+    ".mkv": "matroska",
+    ".webm": "matroska",
+}
+_PROTOCOL_WHITELIST = "file,pipe"
+
 
 class VideoConversionError(Exception):
     """A video could not be converted (unreadable, too long, or ffmpeg failed).
@@ -40,11 +53,17 @@ def looks_like_video(header):
     return False
 
 
+def _input_args(path):
+    demuxer = _DEMUXERS.get(Path(path).suffix.lower(), "mov")
+    return ["-protocol_whitelist", _PROTOCOL_WHITELIST, "-f", demuxer]
+
+
 def _probe_duration(path):
     """Return the video duration in seconds, or ``None`` if it can't be read."""
     cmd = [
         "ffprobe",
         "-v", "error",
+        *_input_args(path),
         "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1",
         str(path),
@@ -79,6 +98,7 @@ def _convert(video_path, gif_path):
         "ffmpeg",
         "-nostdin",
         "-y",
+        *_input_args(video_path),
         "-i", str(video_path),
         "-filter_complex",
         f"[0:v] {scale},split [a][b];[a] palettegen [p];[b][p] paletteuse",

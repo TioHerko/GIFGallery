@@ -12,6 +12,38 @@ logger = logging.getLogger(__name__)
 THUMB_MAX_WIDTH = 320
 
 
+def gif_limit_error(fileobj):
+    """Return a user-facing error if a GIF exceeds the decoded size limits.
+
+    ``fileobj`` is rewound to the start before returning, so the upload can
+    still be stored when this passes. The byte-size cap alone does not stop a
+    small file from declaring a huge canvas or thousands of frames.
+    """
+    try:
+        with Image.open(fileobj) as im:
+            width, height = im.size
+            frames = getattr(im, "n_frames", 1)
+    except Exception:
+        return "not a readable GIF"
+    finally:
+        try:
+            fileobj.seek(0)
+        except (AttributeError, OSError):
+            pass
+
+    if width * height > settings.GIF_MAX_PIXELS:
+        return (
+            f"image is {width}x{height} pixels; "
+            f"the limit is {settings.GIF_MAX_PIXELS} pixels"
+        )
+    if frames > settings.GIF_MAX_FRAMES:
+        return (
+            f"image has {frames} frames; "
+            f"the limit is {settings.GIF_MAX_FRAMES} frames"
+        )
+    return None
+
+
 def generate_thumbnail_bytes(src_path, max_width=THUMB_MAX_WIDTH):
     """Return animated-GIF bytes scaled to ``max_width`` (preserving frame
     timing and loop count), or ``None`` if the source is already small enough
@@ -19,6 +51,18 @@ def generate_thumbnail_bytes(src_path, max_width=THUMB_MAX_WIDTH):
     try:
         with Image.open(src_path) as im:
             width, height = im.size
+            if width * height > settings.GIF_MAX_PIXELS:
+                logger.warning(
+                    "Skipping thumbnail for oversized GIF %s (%dx%d)",
+                    src_path, width, height,
+                )
+                return None
+            if getattr(im, "n_frames", 1) > settings.GIF_MAX_FRAMES:
+                logger.warning(
+                    "Skipping thumbnail for GIF %s with too many frames",
+                    src_path,
+                )
+                return None
             if width <= max_width:
                 return None
 
