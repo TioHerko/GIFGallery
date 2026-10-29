@@ -29,10 +29,20 @@ final class GIFPreviewPanel {
             object: nil,
             queue: .main
         ) { _ in MainActor.assumeIsolated { GIFPreviewPanel.shared.hide() } }
+        // Sheets and alerts (rename, tags, delete, …) sit below the floating
+        // panel, so clear any preview out of their way as they open.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willBeginSheetNotification,
+            object: nil,
+            queue: .main
+        ) { _ in MainActor.assumeIsolated { GIFPreviewPanel.shared.hide() } }
     }
 
     func show(data: Data, id: String, at point: NSPoint) {
-        guard let size = Self.previewSize(for: data, near: point) else { return }
+        // No previews while a dialog is up — including from a hover that
+        // started just before it opened and finished its delay after.
+        guard !Self.isDialogShowing,
+              let size = Self.previewSize(for: data, near: point) else { return }
 
         let panel = panel ?? makePanel()
         self.panel = panel
@@ -84,6 +94,12 @@ final class GIFPreviewPanel {
             MainActor.assumeIsolated { GIFPreviewPanel.shared.hide() }
             return event
         }
+    }
+
+    /// A sheet, alert or confirmation dialog is attached to some window, or
+    /// an app-modal panel is running.
+    private static var isDialogShowing: Bool {
+        NSApp.modalWindow != nil || NSApp.windows.contains { $0.attachedSheet != nil }
     }
 
     /// The GIF's pixel size, scaled to fit comfortably on the pointer's
