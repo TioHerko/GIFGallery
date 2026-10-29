@@ -71,7 +71,7 @@ struct GalleryView: View {
                         .padding()
                     }
                 }
-                .onDrop(of: [.gif, .movie, .fileURL, .url], isTargeted: nil) { providers in
+                .onDrop(of: UploadSheet.dropTypes, isTargeted: nil) { providers in
                     handleDrop(providers)
                     return true
                 }
@@ -190,23 +190,7 @@ struct GalleryView: View {
     /// GIFs — and opens the upload sheet so they can be tagged.
     private func handleDrop(_ providers: [NSItemProvider]) {
         Task {
-            var payloads: [SharePayload] = []
-            var firstError: String?
-            let maxSeconds = await viewModel.videoMaxDurationSeconds()
-            for provider in providers {
-                do {
-                    let payload = try await GIFIngest.load(from: provider)
-                    if let maxSeconds,
-                       let reason = await UploadMedia.overLengthReason(
-                           data: payload.data, name: payload.filename, maxSeconds: maxSeconds) {
-                        if firstError == nil { firstError = reason }
-                        continue
-                    }
-                    payloads.append(payload)
-                } catch {
-                    if firstError == nil { firstError = error.localizedDescription }
-                }
-            }
+            let (payloads, firstError) = await UploadSheet.load(providers, viewModel: viewModel)
             if payloads.isEmpty {
                 flash(firstError ?? "Nothing dropped was a GIF or supported video.")
                 return

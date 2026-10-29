@@ -100,14 +100,45 @@ public struct APIClient: Sendable {
         let _ = try await URLSession.shared.data(for: req)
     }
 
-    public func upload(files: [URL], tags: String, titlePrefix: String) async throws -> [String] {
+    public func upload(
+        files: [URL], tags: String, titlePrefix: String, details: [UploadItemDetails?] = []
+    ) async throws -> [String] {
         let payloads = try files.map {
             SharePayload(filename: $0.lastPathComponent, data: try Data(contentsOf: $0))
         }
-        return try await upload(payloads: payloads, tags: tags, titlePrefix: titlePrefix)
+        return try await upload(payloads: payloads, tags: tags, titlePrefix: titlePrefix, details: details)
     }
 
-    public func upload(payloads: [SharePayload], tags: String, titlePrefix: String) async throws -> [String] {
+    /// `details`, when given, is aligned with `payloads`: each non-nil entry
+    /// is applied to its GIF after the upload (see `apply(_:to:tags:titlePrefix:)`).
+    public func upload(
+        payloads: [SharePayload], tags: String, titlePrefix: String, details: [UploadItemDetails?] = []
+    ) async throws -> [String] {
+        let created = try await uploadBatch(payloads: payloads, tags: tags, titlePrefix: titlePrefix)
+        await apply(details, to: created, tags: tags, titlePrefix: titlePrefix)
+        return created
+    }
+
+    /// Renames and retags freshly uploaded GIFs. The server creates a batch
+    /// all-or-nothing and returns ids in upload order, so `created` lines up
+    /// with `details`. Best-effort: the GIFs already exist, and throwing here
+    /// would invite a retry that uploads them twice.
+    private func apply(_ details: [UploadItemDetails?], to created: [String], tags: String, titlePrefix: String) async {
+        guard details.count == created.count else { return }
+        for (id, item) in zip(created, details) {
+            guard let item else { continue }
+            if !item.title.isEmpty {
+                let title = titlePrefix.isEmpty ? item.title : "\(titlePrefix) \(item.title)"
+                _ = try? await rename(id: id, title: title)
+            }
+            if !item.tags.isEmpty {
+                let combined = [tags, item.tags].filter { !$0.isEmpty }.joined(separator: ", ")
+                _ = try? await updateTags(id: id, tags: combined)
+            }
+        }
+    }
+
+    private func uploadBatch(payloads: [SharePayload], tags: String, titlePrefix: String) async throws -> [String] {
         let boundary = "Boundary-\(UUID().uuidString)"
         var req = request("upload/")
         req.httpMethod = "POST"

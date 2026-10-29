@@ -60,6 +60,7 @@ export DEVELOPMENT_TEAM=XXXXXXXXXX
 - **GIF serving** (`/gif/<id>/`): public (no auth), returns `Cache-Control: public, max-age=31536000, immutable`
 - **Production hardening is gated on `DJANGO_SECRET_KEY`**: setting it enables Secure cookies, HSTS, and `SECURE_PROXY_SSL_HEADER`; without it the app runs in dev mode with a public fallback key. The Docker container refuses to start without it.
 - **Uploads are validated**: GIF magic bytes + `GIF_MAX_UPLOAD_BYTES` size cap, enforced in `upload_view`
+- **Upload title/tag suggestions are Swift-client-only**: the clients propose a title and tags per file on-device (Vision OCR of a few frames + filename words, fed to the Foundation Models LLM). The server is unchanged — the client applies per-file titles/tags after `/upload/` via the rename and tags endpoints. See "Swift clients" below.
 - **Bearer-token requests never fall back to session auth** (they're CSRF-exempt, so session fallback would be a CSRF bypass — see `gallery/auth.py`)
 - **Async views must resolve `request.user`**: `request.user` is a `SimpleLazyObject` that triggers synchronous DB access when resolved. In async views, use `await request.auser()` or rely on `auth_required` (which sets `request.user = user` for both bearer and session auth). `gallery_view` uses `@login_required` (synchronous) so it manually resolves via `await request.auser()`.
 - **CDN assets are version-pinned with SRI hashes** in `base.html`; upgrading requires recomputing the integrity hash
@@ -126,6 +127,8 @@ The shared `GIFKit` package provides:
 - `KeychainStore`: Stores bearer token in the keychain (not UserDefaults). Supports app group sharing.
 - `SharedStore`: App group configuration (server URL, token). On macOS, derives the Team ID from the code signature at runtime.
 - `GIFIngest`: Validates GIF magic bytes on incoming share-sheet items before upload.
+- `UploadSuggester`: Proposes a title and tags for a file being uploaded. OCRs up to six frames (Vision `RecognizeTextRequest`), extracts words from the filename (generated names like `IMG_1234`, `photo-3` or UUIDs are dropped), and asks the on-device Foundation Models LLM for a `@Generable` title + tags, passing existing tag names so it reuses them. Returns nil when the model is unavailable (before macOS/iOS 26, Apple Intelligence off, model downloading), when there's no text to go on, or when the model declines. FoundationModels is weak-linked, so the apps still launch on older OSes. Logs under subsystem `me.herko.gif`, category `suggestions`.
+- `UploadDetails` / `UploadItemFields`: Per-file title/tag state and fields for the upload sheets (macOS, iOS, both share extensions). Analyzes files one at a time and only fills fields the user hasn't typed into. Queued ids are tracked apart from field contents, because macOS writes a field's binding back as soon as it takes focus. `APIClient.upload(..., details:)` applies them after the upload — `/upload/` returns ids in upload order — best-effort, so a failed rename never prompts a duplicate upload. The fields are hidden where suggestions are unavailable.
 
 `GIFKit` has a test target (`cd clients/GIFKit && swift test`), run in CI before the macOS build.
 

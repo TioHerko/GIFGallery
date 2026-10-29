@@ -15,6 +15,7 @@ public struct ShareUploadView: View {
     @State private var isLoading = true
     @State private var isUploading = false
     @State private var errorMessage: String?
+    @State private var details = UploadDetails()
 
     public init(providers: [NSItemProvider], onComplete: @escaping (_ uploaded: Bool) -> Void) {
         self.providers = providers
@@ -55,10 +56,17 @@ public struct ShareUploadView: View {
                 }
                 failureList
 
-                TextField("Tags (comma-separated)", text: $tags)
-                    .textFieldStyle(.roundedBorder)
-                TextField("Title prefix (optional)", text: $titlePrefix)
-                    .textFieldStyle(.roundedBorder)
+                Group {
+                    if details.isEnabled {
+                        fileDetails
+                    }
+                    TextField(
+                        details.isEnabled && payloads.count > 1
+                            ? "Tags for all files (comma-separated)" : "Tags (comma-separated)",
+                        text: $tags)
+                    TextField("Title prefix (optional)", text: $titlePrefix)
+                }
+                .textFieldStyle(.roundedBorder)
 
                 if let errorMessage {
                     Text(errorMessage)
@@ -83,6 +91,32 @@ public struct ShareUploadView: View {
         .frame(width: 360)
         #endif
         .task { await loadAttachments() }
+        .onDisappear { details.reset() }
+    }
+
+    /// Suggested title and tags per item; filenames label them only when
+    /// there's more than one.
+    @ViewBuilder
+    private var fileDetails: some View {
+        if payloads.count == 1 {
+            UploadItemFields(details: details, id: payloads[0].id, filename: payloads[0].filename)
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(payloads) { payload in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(payload.filename)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            UploadItemFields(details: details, id: payload.id, filename: payload.filename)
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 220)
+        }
     }
 
     /// GIFs animate inline; videos (which the on-device decoder can't play
@@ -139,6 +173,10 @@ public struct ShareUploadView: View {
                     continue
                 }
                 payloads.append(payload)
+                // The extension has no gallery loaded, so no existing tags.
+                details.analyze(payload.id, filename: payload.filename, existingTags: []) {
+                    [data = payload.data] in data
+                }
             } catch {
                 failures.append(error.localizedDescription)
             }
@@ -151,9 +189,11 @@ public struct ShareUploadView: View {
         isUploading = true
         errorMessage = nil
         let payloads = payloads, tags = tags, titlePrefix = titlePrefix
+        let itemDetails = details.details(for: payloads.map(\.id))
         Task {
             do {
-                _ = try await client.upload(payloads: payloads, tags: tags, titlePrefix: titlePrefix)
+                _ = try await client.upload(
+                    payloads: payloads, tags: tags, titlePrefix: titlePrefix, details: itemDetails)
                 onComplete(true)
             } catch {
                 errorMessage = error.localizedDescription

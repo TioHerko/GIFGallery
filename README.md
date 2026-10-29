@@ -2,7 +2,7 @@
 
 **This repository is mostly vibe-coded. If you feel uneasy about that, please don't use it.** \*
 
-This repository contains a Django application to run on a Linux/UNIX-y system. It provides GIF storage, handling, and distribution. The source code is available here, and binary artifacts are in the Releases page. It also includes a macOS native client with a little bit of extra functionality (for example, it can send GIFs straight to a Discord conversation).
+This repository contains a Django application to run on a Linux/UNIX-y system. It provides GIF storage, handling, and distribution. The source code is available here, and binary artifacts are in the Releases page. It also includes a macOS native client with a little bit of extra functionality (for example, it can send GIFs straight to a Discord conversation, and on macOS/iOS 26 with Apple Intelligence it suggests titles and tags for uploads on-device, from the filename and any text in the frames).
 
 The Django application requires:
 

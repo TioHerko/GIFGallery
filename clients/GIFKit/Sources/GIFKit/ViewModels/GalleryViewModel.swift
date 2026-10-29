@@ -241,20 +241,22 @@ public final class GalleryViewModel {
         }
     }
 
-    public func upload(files: [URL], tags: String, titlePrefix: String) async {
+    public func upload(files: [URL], tags: String, titlePrefix: String, details: [UploadItemDetails?] = []) async {
         guard let client else { return }
         do {
-            _ = try await client.upload(files: files, tags: tags, titlePrefix: titlePrefix)
+            _ = try await client.upload(files: files, tags: tags, titlePrefix: titlePrefix, details: details)
             await fetchGIFs()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    public func upload(payloads: [SharePayload], tags: String, titlePrefix: String) async {
+    public func upload(
+        payloads: [SharePayload], tags: String, titlePrefix: String, details: [UploadItemDetails?] = []
+    ) async {
         guard let client else { return }
         do {
-            _ = try await client.upload(payloads: payloads, tags: tags, titlePrefix: titlePrefix)
+            _ = try await client.upload(payloads: payloads, tags: tags, titlePrefix: titlePrefix, details: details)
             await fetchGIFs()
         } catch {
             errorMessage = error.localizedDescription

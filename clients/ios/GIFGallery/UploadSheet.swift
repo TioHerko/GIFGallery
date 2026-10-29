@@ -17,6 +17,7 @@ struct UploadSheet: View {
     @State private var tags = ""
     @State private var titlePrefix = ""
     @State private var isUploading = false
+    @State private var details = UploadDetails()
 
     /// Picked media is staged to a temp file right away so the sheet never
     /// holds every selection in memory at once (the upload body is built
@@ -47,20 +48,26 @@ struct UploadSheet: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(pendingFiles) { file in
-                            HStack {
-                                Text(file.name)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                Spacer()
-                                Button {
-                                    pendingFiles.removeAll { $0.id == file.id }
-                                    try? FileManager.default.removeItem(at: file.url)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text(file.name)
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                    Spacer()
+                                    Button {
+                                        pendingFiles.removeAll { $0.id == file.id }
+                                        details.remove(file.id)
+                                        try? FileManager.default.removeItem(at: file.url)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.borderless)
                                 }
-                                .buttonStyle(.borderless)
+                                if details.isEnabled {
+                                    UploadItemFields(details: details, id: file.id, filename: file.name)
+                                }
                             }
                         }
                     }
@@ -80,7 +87,8 @@ struct UploadSheet: View {
                 }
 
                 Section("Details") {
-                    TextField("Tags (comma-separated)", text: $tags)
+                    TextField(details.isEnabled ? "Tags for all files (comma-separated)" : "Tags (comma-separated)",
+                              text: $tags)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextField("Title prefix (optional)", text: $titlePrefix)
@@ -139,6 +147,7 @@ struct UploadSheet: View {
         try? FileManager.default.removeItem(at: dir)
         stagingDir = nil
         pendingFiles = []
+        details.reset()
     }
 
     /// Writes one validated file into the staging dir (off the main actor)
@@ -154,7 +163,11 @@ struct UploadSheet: View {
             try await Task.detached(priority: .utility) {
                 try data.write(to: url)
             }.value
-            pendingFiles.append(PendingFile(name: name, url: url))
+            let file = PendingFile(name: name, url: url)
+            pendingFiles.append(file)
+            details.analyze(file.id, filename: name, existingTags: viewModel.availableTags.map(\.name)) {
+                try? Data(contentsOf: url)
+            }
         } catch {
             skippedCount += 1
         }
@@ -221,7 +234,8 @@ struct UploadSheet: View {
             await viewModel.upload(
                 files: pendingFiles.map(\.url),
                 tags: tags,
-                titlePrefix: titlePrefix
+                titlePrefix: titlePrefix,
+                details: details.details(for: pendingFiles.map(\.id))
             )
             isUploading = false
             cleanupStaging()
