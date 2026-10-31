@@ -17,6 +17,17 @@ public struct SettingsView: View {
             Section("Server") {
                 TextField("URL", text: $serverURL, prompt: Text("https://gif.example.com"))
                     .textContentType(.URL)
+                    #if os(iOS)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    #endif
+                    // Belt and braces: autocapitalization turns "https://"
+                    // into "Https://", and pasted URLs can carry capitals too.
+                    .onChange(of: serverURL) { _, newValue in
+                        let lowered = newValue.lowercased()
+                        if lowered != newValue { serverURL = lowered }
+                    }
                 SecureField("API Token", text: $bearerToken, prompt: Text("Paste your API token"))
                     .onChange(of: bearerToken) { _, newValue in
                         // Surface keychain failures; a silent failure here
